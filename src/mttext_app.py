@@ -1,10 +1,7 @@
 import asyncio
 import curses
 from model import Model
-import websockets
-from websockets import connect
-from websockets import serve
-from websockets.exceptions import ConnectionClosedOK
+import socket
 
 
 class MtTextEditApp():
@@ -42,6 +39,7 @@ class MtTextEditApp():
         }
         self._username = username
         self._send_queue = asyncio.Queue()
+        self._msg_queue = asyncio.Queue()
 
     def run(self):
         curses.wrapper(self._main)
@@ -54,9 +52,6 @@ class MtTextEditApp():
         await asyncio.sleep(0.1)
         self._stop = True
         await self._model.stop_view()
-        if self._client != None:
-            self._client.close_timeout = 0
-            await self._client.close()
 
     async def send(self, item):
         await self._send_queue.put(item)
@@ -90,10 +85,12 @@ class MtTextEditApp():
                 await self._parse_key(key)
             await asyncio.sleep(0.01)
 
-    async def _consumer_handler(self, websocket):
-        async for message in websocket:
+    async def _consumer_handler(self, reader):
+        while True:
             if self._stop:
                 return
+            data = await reader.read(255)
+            message = data.decode()
             args = message.split(' ')
             if self.debug:
                 print(message)
@@ -125,14 +122,16 @@ class MtTextEditApp():
             if self._is_host:
                 await self.send(message)
 
-    async def _producer_handler(self, websocket):
+    async def _producer_handler(self, writer):
         while True:
             if self._stop:
                 return
             message = await self._send_queue.get()
             try:
-                await websocket.send(message)
-            except ConnectionClosedOK:
+                writer.write(message.encode())
+                await writer.drain()
+            except:
+                print("error sending msg")
                 break
 
     async def _server_producer_handler(self):
@@ -142,18 +141,20 @@ class MtTextEditApp():
             message = await self._send_queue.get()
             for connection in self._connections:
                 try:
-                    await connection.send(message)
-                except ConnectionClosedOK:
+                    connection.write(message.encode())
+                    await connection.drain()
+                except:
+                    print(f"ERROR SENDING MESSAGE")
                     self._connections.remove(connection)
 
-    async def _connection_handler(self, websocket: websockets.ServerConnection):
-        self._connections.append(websocket)
+    async def _connection_handler(self, reader, writer):
         user_pos = [await self._model.get_user_pos(
             x) for x in self._model.users]
         user_pos_strings = [f"{x[0]} {x[1]}" for x in user_pos]
+        self._connections.append(writer)
         await self.send(f"{self._username} -U {' '.join([f"{x[0]} {x[1]}" for x in zip(self._model.users, user_pos_strings)])}")
         await self.send(f"{self._username} -T {'\n'.join(self._model.text_lines)}")
-        await self._consumer_handler(websocket)
+        await self._consumer_handler(reader)
 
     def _main(self, *args, **kwargs):
         asyncio.run(self._async_main(*args, **kwargs))
@@ -164,17 +165,18 @@ class MtTextEditApp():
         if not self.debug:
             asyncio.get_event_loop().run_in_executor(None, self._model.run_view, stdscr)
         if not should_connect:
-            server = await serve(self._connection_handler, "0.0.0.0", 12000)
+            server = await asyncio.start_server(
+                self._connection_handler, '127.0.0.1', 12000)
             await asyncio.gather(
                 self._input_handler(),
                 self._server_producer_handler()
             )
-            server.close()
         else:
-            self._client = await connect('ws://' + conn_ip + ':12000')
+            reader, writer = await asyncio.open_connection(
+                conn_ip, 12000)
             await self.send(f"{self._username} -C {self._username}")
             await asyncio.gather(
-                self._consumer_handler(self._client),
-                self._producer_handler(self._client),
+                self._consumer_handler(reader),
+                self._producer_handler(writer),
                 self._input_handler()
             )

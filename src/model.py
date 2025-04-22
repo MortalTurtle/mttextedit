@@ -6,6 +6,7 @@ from view import View
 class Model:
     users: list = list()
     user_positions: dict = {}
+    shift_user_positions: dict = {}
     _text_m = Lock()
     _users_m = Lock()
     _users_pos_m = Lock()
