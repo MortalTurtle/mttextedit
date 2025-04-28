@@ -1,7 +1,7 @@
 import asyncio
 import curses
+from message_parser import MessageParser
 from model import Model
-import socket
 
 
 class MtTextEditApp():
@@ -9,7 +9,9 @@ class MtTextEditApp():
     _username: str
     _server = None
     _client = None
-    _connections = []
+    _writers = []
+    _reader_to_writer = {}
+    _DELIMITER = b' \n\x1E'
 
     def __init__(self, username: str, filetext: str = "", debug=False, file_path=None):
         self.debug = debug
@@ -22,22 +24,31 @@ class MtTextEditApp():
             curses.KEY_DOWN: self._model.user_pos_shifted_down,
             curses.KEY_UP: self._model.user_pos_shifted_up,
             curses.KEY_BACKSPACE: self._model.user_deleted_char,
-            10: self._model.user_added_new_line  # ENTER
+            10: self._model.user_added_new_line,  # ENTER
+            337: self._model.user_shifted_up,  # SHIFT + UP
+            336: self._model.user_shifted_down,  # SHIFT + DOWN
+            393: self._model.user_shifted_left,  # SHIFT + LEFT
+            402: self._model.user_shifted_right  # SHIFT + RIGHT
         }
         user_pos = self._model.user_positions
         self._get_msg_by_key = {
             curses.KEY_BACKSPACE: lambda x: f"{x} -D",
-            curses.KEY_LEFT: lambda x: f"{x} -M {user_pos[x][0]} {user_pos[x][1]}",
-            curses.KEY_RIGHT: lambda x: self._get_msg_by_key[curses.KEY_LEFT](x),
-            curses.KEY_DOWN: lambda x: self._get_msg_by_key[curses.KEY_LEFT](x),
-            curses.KEY_UP: lambda x: self._get_msg_by_key[curses.KEY_LEFT](x),
-            10: lambda x: f"{x} -NL"  # ENTER
+            curses.KEY_LEFT: lambda x: f"{x} -M l",
+            curses.KEY_RIGHT: lambda x: f"{x} -M r",
+            curses.KEY_DOWN: lambda x: f"{x} -M d",
+            curses.KEY_UP: lambda x:  f"{x} -M u",
+            10: lambda x: f"{x} -NL",  # ENTER,
+            337: lambda x: f"{x} -MS u",  # SHIFT + UP
+            336: lambda x: f"{x} -MS d",  # SHIFT + DOWN
+            393: lambda x: f"{x} -MS l",  # SHIFT + LEFT
+            402: lambda x: f"{x} -MS r"  # SHIFT + RIGHT
         }
         self._func_by_special_key = {
             19: self._model.save_file,
             3: self.stop
         }
         self._username = username
+        self._msg_parser = MessageParser(self._model, self._is_host, username)
         self._send_queue = asyncio.Queue()
         self._msg_queue = asyncio.Queue()
 
@@ -89,36 +100,20 @@ class MtTextEditApp():
         while True:
             if self._stop:
                 return
-            data = await reader.read(255)
+            try:
+                data = await reader.readuntil(self._DELIMITER)
+            except:
+                if self._is_host:
+                    self._writers.remove(self._reader_to_writer[reader])
+                return
             message = data.decode()
             args = message.split(' ')
             if self.debug:
                 print(message)
-            if args[1] == '-U' and not hasattr(self, "_initialized"):
-                self._initialized = True
-                for i in range(2, len(args) - 2, 3):
-                    if args[i] == self._username:
-                        await self.stop()
-                        print("Sorry, server already have user with your username")
-                    await self._model.add_user(args[i])
-                    await self._model.user_pos_update(args[i], int(args[i + 1]), int(args[i + 2]))
-            if args[1] == '-C' and args[0] not in self._model.users:
-                await self._model.add_user(args[0])
-            if args[0] == self._username or args[0] not in self._model.users:
-                continue
-            if args[1] == '-T':
-                await self._model.text_upload(' '.join(args[2:]))
-            if args[1] == '-M':
-                await self._model.user_pos_update(args[0],
-                                                  int(args[2]), int(args[3]))
-            if args[1] == '-E':
-                await self._model.user_wrote_char(args[0], args[2] if args[2] != '/s' else ' ')
-            if args[1] == '-D':
-                await self._model.user_deleted_char(args[0])
-            if args[1] == '-DC':
-                await self._model.user_disconnected(args[0])
-            if args[1] == '-NL':
-                await self._model.user_added_new_line(args[0])
+            if args[1] == '-DCH':
+                await self.stop()
+                return
+            await self._msg_parser.parse_message(args)
             if self._is_host:
                 await self.send(message)
 
@@ -126,32 +121,39 @@ class MtTextEditApp():
         while True:
             if self._stop:
                 return
-            message = await self._send_queue.get()
             try:
-                writer.write(message.encode())
+                message = self._send_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(0.1)
+                continue
+            try:
+                writer.write(message.encode() + self._DELIMITER)
                 await writer.drain()
             except:
-                print("error sending msg")
                 break
 
     async def _server_producer_handler(self):
         while True:
             if self._stop:
                 return
-            message = await self._send_queue.get()
-            for connection in self._connections:
+            try:
+                message = self._send_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(0.1)
+                continue
+            for connection in self._writers:
                 try:
-                    connection.write(message.encode())
+                    connection.write(message.encode() + self._DELIMITER)
                     await connection.drain()
                 except:
-                    print(f"ERROR SENDING MESSAGE")
-                    self._connections.remove(connection)
+                    self._writers.remove(connection)
 
     async def _connection_handler(self, reader, writer):
         user_pos = [await self._model.get_user_pos(
             x) for x in self._model.users]
         user_pos_strings = [f"{x[0]} {x[1]}" for x in user_pos]
-        self._connections.append(writer)
+        self._writers.append(writer)
+        self._reader_to_writer[reader] = writer
         await self.send(f"{self._username} -U {' '.join([f"{x[0]} {x[1]}" for x in zip(self._model.users, user_pos_strings)])}")
         await self.send(f"{self._username} -T {'\n'.join(self._model.text_lines)}")
         await self._consumer_handler(reader)
