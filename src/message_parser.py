@@ -28,7 +28,9 @@ class MessageParser:
             '-D': self._user_deleted_char,
             '-DC': self._user_disconnected,
             '-NL': self._user_wrote_new_line,
-            '-DCH': self._user_disconnected
+            '-DCH': self._user_disconnected,
+            '-PASTE': self._user_pasted,
+            '-CUT': self._user_cut
         }
 
     async def _user_connected(self, args):
@@ -63,6 +65,12 @@ class MessageParser:
 
     async def _upload_text(self, args):
         await self._model.text_upload(' '.join(args[2:-1]))
+
+    async def _user_pasted(self, args):
+        await self._model.paste(args[0], ' '.join(args[2: -1]))
+
+    async def _user_cut(self, args):
+        await self._model.cut(args[0])
 
     async def parse_message(self, args):
         if args[1] == '-U' and not hasattr(self, "_initialized"):

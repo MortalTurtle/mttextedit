@@ -3,6 +3,8 @@ from functools import wraps
 import time
 from view import View
 
+# TODO check user pos to be always in bounds
+
 
 class Model:
     users: list = list()
@@ -11,6 +13,7 @@ class Model:
     _text_m = Lock()
     _users_m = Lock()
     _users_pos_m = Lock()
+    _buffer = ""
 
     def __init__(self, text: str, owner_username, file_path=None):
         self._stop = False
@@ -51,6 +54,80 @@ class Model:
 
     async def stop_view(self):
         self._stop = True
+
+    async def _get_user_top_bot_selected(self, username):
+        top = self.user_positions[username]
+        bot = self.shift_user_positions[username]
+        if bot[1] < top[1] or bot[1] == top[1] and bot[0] < top[0]:
+            t = bot
+            bot = top
+            top = t
+        return (top, bot)
+
+    async def _cut_selected_text(self, top, bot):
+        bot_x, bot_y = bot
+        top_x, top_y = top
+        async with self._text_m:
+            if bot_y == top_y:
+                self.text_lines[bot_y] = self.text_lines[bot_y][:top_x] + \
+                    self.text_lines[bot_y][bot_x:]
+            else:
+                self.text_lines[top_y] = self.text_lines[top_y][:top_x] + \
+                    self.text_lines[bot_y][bot_x:]
+                self.text_lines.pop(bot_y)
+            for y in range(bot_y - 1, top_y, -1):
+                self.text_lines.pop(y)
+
+    async def copy_to_buffer(self):
+        if self._owner_username not in self.shift_user_positions:
+            return
+        top, bot = await self._get_user_top_bot_selected(self._owner_username)
+        top_x, top_y = top
+        bot_x, bot_y = bot
+        if bot_y == top_y:
+            self._buffer = self.text_lines[bot_y][top_x:bot_x]
+            return
+        t = '' if bot_y - \
+            top_y <= 1 else '\n'.join(self.text_lines[top_y + 1: bot_y]) + '\n'
+        self._buffer = self.text_lines[top_y][top_x:] + '\n' + \
+            t + \
+            self.text_lines[bot_y][:bot_x]
+
+    async def paste(self, username, tex_to_paste):
+        if username in self.shift_user_positions:
+            await self._user_deleted_char_shifted(username)
+        lines_to_paste = tex_to_paste.split('\n')
+        user_x, user_y = self.user_positions[username]
+        moved_user_x, moved_user_y = self.user_positions[username]
+        moved_user_x += len(lines_to_paste[0])
+        if len(lines_to_paste) != 1:
+            moved_user_x = len(lines_to_paste[-1])
+        lines_to_paste[-1] = lines_to_paste[-1] + \
+            self.text_lines[user_y][user_x:]
+        async with self._text_m:
+            self.text_lines[user_y] = self.text_lines[user_y][:user_x] + \
+                lines_to_paste[0]
+            for i in range(1, len(lines_to_paste)):
+                user_y += 1
+                self.text_lines.insert(user_y, lines_to_paste[i])
+        moved_user_y = user_y
+        async with self._users_pos_m:
+            self.user_positions[username] = (
+                moved_user_x, moved_user_y)
+
+    async def paste_from_buffer(self):
+        await self.paste(self._owner_username, self._buffer)
+
+    async def cut_to_buffet(self):
+        if self._owner_username not in self.shift_user_positions:
+            return
+        await self.copy_to_buffer()
+        await self._user_deleted_char_shifted(self._owner_username)
+
+    async def cut(self, username):
+        if username not in self.shift_user_positions:
+            return
+        await self._user_deleted_char_shifted(username)
 
     def run_view(self, stdscr):
         self.view = View(stdscr, self._owner_username)
@@ -105,35 +182,20 @@ class Model:
             return wrapper
         return dec
 
-    def _handle_edit_user_if_user_shifted(func):
+    def _handle_edit_if_user_shifted(func):
         async def wrapper(self, username, *args, **kwargs):
             if username not in self.shift_user_positions:
                 await func(self, username, *args, *kwargs)
                 return
-            top = self.user_positions[username]
-            bot = self.shift_user_positions[username]
-            if bot[1] < top[1] or bot[1] == top[1] and bot[0] < top[0]:
-                t = bot
-                bot = top
-                top = t
-            bot_x, bot_y = bot
-            top_x, top_y = top
-            async with self._text_m, self._users_pos_m:
+            top, bot = await self._get_user_top_bot_selected(username)
+            await self._cut_selected_text(top, bot)
+            async with self._users_pos_m:
                 self.shift_user_positions.pop(username)
                 self.user_positions[username] = top
-                if bot_y == top_y:
-                    self.text_lines[bot_y] = self.text_lines[bot_y][:top_x] + \
-                        self.text_lines[bot_y][bot_x:]
-                else:
-                    self.text_lines[top_y] = self.text_lines[top_y][:top_x] + \
-                        self.text_lines[bot_y][bot_x:]
-                    self.text_lines.pop(bot_y)
-                for y in range(bot_y - 1, top_y, -1):
-                    self.text_lines.pop(y)
             await func(self, username, *args, *kwargs)
         return wrapper
 
-    @_handle_edit_user_if_user_shifted
+    @_handle_edit_if_user_shifted
     async def user_wrote_char(self, username, char):
         user_x, user_y = self.user_positions[username]
         async with self._text_m:
@@ -210,7 +272,7 @@ class Model:
     async def user_shifted_down(self, username):
         await self.user_pos_shifted_down(username, True)
 
-    @_handle_edit_user_if_user_shifted
+    @_handle_edit_if_user_shifted
     async def _user_deleted_char_shifted(self, username):
         pass
 
@@ -235,7 +297,7 @@ class Model:
                     self.text_lines[user_y][user_x:]
         await self.user_pos_shifted_left(username)
 
-    @_handle_edit_user_if_user_shifted
+    @_handle_edit_if_user_shifted
     async def user_added_new_line(self, username):
         user_x, user_y = self.user_positions[username]
         async with self._text_m:

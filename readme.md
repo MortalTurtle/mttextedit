@@ -28,3 +28,7 @@ multi-user text editor
     [sender_username] -D / user deleted char
 
     [sender_username] -NL / user added new line
+
+    [sender_username] -CUT / user cut text
+
+    [sender_username] -PASTE [text] / user pasted text

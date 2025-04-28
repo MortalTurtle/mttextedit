@@ -41,11 +41,16 @@ class MtTextEditApp():
             337: lambda x: f"{x} -MS u",  # SHIFT + UP
             336: lambda x: f"{x} -MS d",  # SHIFT + DOWN
             393: lambda x: f"{x} -MS l",  # SHIFT + LEFT
-            402: lambda x: f"{x} -MS r"  # SHIFT + RIGHT
+            402: lambda x: f"{x} -MS r",  # SHIFT + RIGHT
+            22: lambda x: f"{x} -PASTE {self._model._buffer}",  # CTRL + V
+            24: lambda x: f"{x} -CUT"  # CTRL + X
         }
         self._func_by_special_key = {
-            19: self._model.save_file,
-            3: self.stop
+            19: self._model.save_file,  # CTRL + S
+            27: self.stop,  # ESC
+            3: self._model.copy_to_buffer,  # CTRL + C
+            22: self._model.paste_from_buffer,  # CTRL + V
+            24: self._model.cut_to_buffet  # CTRL + X
         }
         self._username = username
         self._msg_parser = MessageParser(self._model, self._is_host, username)
@@ -73,6 +78,8 @@ class MtTextEditApp():
             await self.send(self._get_msg_by_key[key](self._username))
         elif key in self._func_by_special_key:
             await self._func_by_special_key[key]()
+            if key in self._get_msg_by_key:
+                await self.send(self._get_msg_by_key[key](self._username))
         else:
             if 32 <= key <= 126:
                 key_str = chr(key)

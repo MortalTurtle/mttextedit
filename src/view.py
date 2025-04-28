@@ -20,6 +20,7 @@ class View:
         curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_CYAN)
         curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_YELLOW)
         curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_GREEN)
+        self.stdscr.bkgd(' ', curses.color_pair(1))
 
     def _correct_offset_by_owner_pos(self, owner_x, owner_y):
         height, width = self.stdscr.getmaxyx()
@@ -98,7 +99,7 @@ class View:
             if user in users_shift_pos:
                 self._draw_user_shift_pos(text_lines,
                                           user, user_positions[user], users_shift_pos[user])
-                return
+                continue
             user_x, user_y = user_positions[user]
             if user_x - self._offset_x < 0 or user_x - self._offset_x > width - 1 \
                     or user_y - self._offset_y < 0 or user_y - self._offset_y > height - 3:
