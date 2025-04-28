@@ -9,7 +9,7 @@ multi-user text editor
 
 #internal message format:
 
-    ``[sender_username] -E [printed]`` / user edited
+    ```[sender_username] -E [printed]``` / user edited
 
     ''[sender_username] -M [direction]'' / user position shifted, [direction] can be only 'l'/'r'/'u'/'d'
 
