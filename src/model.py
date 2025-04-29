@@ -157,6 +157,15 @@ class Model:
             self.shift_user_positions.pop(username)
         return user_pos
 
+    def _make_pos_inbounds(func):
+        async def wrapper(self, user_pos, username, user_shifted):
+            user_x, user_y = user_pos
+            user_y = min(user_y, len(self.text_lines) - 1)
+            user_x = min(user_x, len(self.text_lines[user_y]))
+            await func(self, (user_x, user_y), username, user_shifted)
+        return wrapper
+
+    @_make_pos_inbounds
     async def _change_user_pos(self, user_pos, username, user_shifted=False):
         async with self._users_pos_m:
             if user_shifted:
