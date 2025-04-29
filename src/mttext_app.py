@@ -7,8 +7,7 @@ from model import Model
 class MtTextEditApp():
     _model: Model
     _username: str
-    _server = None
-    _client = None
+    _writer = None
     _writers = []
     _reader_to_writer = {}
     _DELIMITER = b' \n\x1E'
@@ -66,6 +65,8 @@ class MtTextEditApp():
     async def stop(self):
         await self.send(f"{self._username} " + ("-DCH" if self._is_host else "-DC"))
         await asyncio.sleep(0.1)
+        if self._writer:
+            self._writer.close()
         self._stop = True
         await self._model.stop_view()
 
@@ -112,7 +113,7 @@ class MtTextEditApp():
             except:
                 if self._is_host:
                     self._writers.remove(self._reader_to_writer[reader])
-                return
+                break
             message = data.decode()
             args = message.split(' ')
             if self.debug:
@@ -131,7 +132,7 @@ class MtTextEditApp():
             try:
                 message = self._send_queue.get_nowait()
             except asyncio.QueueEmpty:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.15)
                 continue
             try:
                 writer.write(message.encode() + self._DELIMITER)
@@ -146,13 +147,14 @@ class MtTextEditApp():
             try:
                 message = self._send_queue.get_nowait()
             except asyncio.QueueEmpty:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.15)
                 continue
             for connection in self._writers:
                 try:
                     connection.write(message.encode() + self._DELIMITER)
                     await connection.drain()
                 except:
+                    connection.close()
                     self._writers.remove(connection)
 
     async def _connection_handler(self, reader, writer):
@@ -183,6 +185,7 @@ class MtTextEditApp():
         else:
             reader, writer = await asyncio.open_connection(
                 conn_ip, 12000)
+            self._writer = writer
             await self.send(f"{self._username} -C {self._username}")
             await asyncio.gather(
                 self._consumer_handler(reader),
