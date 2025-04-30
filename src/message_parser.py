@@ -30,7 +30,9 @@ class MessageParser:
             '-NL': self._user_wrote_new_line,
             '-DCH': self._user_disconnected,
             '-PASTE': self._user_pasted,
-            '-CUT': self._user_cut
+            '-CUT': self._user_cut,
+            '-UNDO': self._user_undo,
+            '-REDO': self._user_redo
         }
 
     async def _user_connected(self, args):
@@ -71,6 +73,12 @@ class MessageParser:
 
     async def _user_cut(self, args):
         await self._model.cut(args[0])
+
+    async def _user_undo(self, args):
+        await self._model.undo(args[0])
+
+    async def _user_redo(self, args):
+        await self._model.redo(args[0])
 
     async def parse_message(self, args):
         if args[1] == '-U' and not hasattr(self, "_initialized"):
