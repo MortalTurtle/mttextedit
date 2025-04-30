@@ -32,3 +32,7 @@ multi-user text editor
     [sender_username] -CUT / user cut text
 
     [sender_username] -PASTE [text] / user pasted text
+    
+    [sender_username] -UNDO / user reverted last action
+    
+    [sender_username] -REDO / user reverted reversion of last action

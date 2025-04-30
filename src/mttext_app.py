@@ -27,9 +27,11 @@ class MtTextEditApp():
             337: self._model.user_shifted_up,  # SHIFT + UP
             336: self._model.user_shifted_down,  # SHIFT + DOWN
             393: self._model.user_shifted_left,  # SHIFT + LEFT
-            402: self._model.user_shifted_right  # SHIFT + RIGHT
+            402: self._model.user_shifted_right,  # SHIFT + RIGHT
+            26: self._model.undo,  # CTRL + Z
+            24: self._model.cut,  # CTRL + X
+            25: self._model.redo  # CTRL + Y
         }
-        user_pos = self._model.user_positions
         self._get_msg_by_key = {
             curses.KEY_BACKSPACE: lambda x: f"{x} -D",
             curses.KEY_LEFT: lambda x: f"{x} -M l",
@@ -42,14 +44,15 @@ class MtTextEditApp():
             393: lambda x: f"{x} -MS l",  # SHIFT + LEFT
             402: lambda x: f"{x} -MS r",  # SHIFT + RIGHT
             22: lambda x: f"{x} -PASTE {self._model._buffer}",  # CTRL + V
-            24: lambda x: f"{x} -CUT"  # CTRL + X
+            24: lambda x: f"{x} -CUT",  # CTRL + X
+            26: lambda x: f"{x} -UNDO",  # CTRL + Z
+            25: lambda x: f"{x} -REDO"  # CTRL + Y
         }
         self._func_by_special_key = {
             19: self._model.save_file,  # CTRL + S
             27: self.stop,  # ESC
             3: self._model.copy_to_buffer,  # CTRL + C
             22: self._model.paste_from_buffer,  # CTRL + V
-            24: self._model.cut_to_buffet  # CTRL + X
         }
         self._username = username
         self._msg_parser = MessageParser(self._model, self._is_host, username)
