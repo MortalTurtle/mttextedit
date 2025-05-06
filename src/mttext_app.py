@@ -209,6 +209,7 @@ class MtTextEditApp():
                 self._writers.append(writer)
                 self._reader_to_writer[reader] = writer
                 if "w" in permissions:
+                    await self._model.add_user(args[0])
                     can_write = True
                 else:
                     try:
