@@ -54,7 +54,7 @@ def main():
         prog="mtrtext",
         description="multi-user text editor",
         epilog=":)",
-        usage="%(prog)s [-D] (-H FILE_PATH USERNAME | -C CONN_IP USERNAME)"
+        usage="%(prog)s [-D] (-H FILE_PATH USERNAME | -C CONN_IP USERNAME | -P USERNAME ACCESS_RIGHTS)"
     )
     parser.add_argument('-D', action='store_true', default=False,
                         dest='debug',
