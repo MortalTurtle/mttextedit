@@ -2,10 +2,11 @@ import re
 from mttext_app import MtTextEditApp
 import sys
 import argparse
+import os
 
 def manage_permissions(username, access_rights):
-    permissions_file = '/var/lib/mttext/permissions.txt'
-    if access_rights not in ['rw', 'r', 'n']:
+    permissions_file = '/tmp/lib/mttext/permissions.txt'
+    if access_rights not in ['rw', 'r']:
         return False
     try:
         permissions = {}
@@ -16,7 +17,7 @@ def manage_permissions(username, access_rights):
                         user, rights = line.strip().split(':')
                         permissions[user] = rights
         except FileNotFoundError:
-            pass
+            os.makedirs(os.path.dirname(permissions_file), exist_ok=True)
         permissions[username] = access_rights
         with open(permissions_file, 'w') as f:
             for user, rights in permissions.items():
@@ -71,7 +72,7 @@ def main():
     try:
         args = parser.parse_args()
         if args.P:
-            manage_permissions(args.P[1], args.P[2])
+            manage_permissions(args.P[0], args.P[1])
         if args.C:
             connect_to_session(args.debug, args.C[0], args.C[1])
         if args.H:

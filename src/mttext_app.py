@@ -11,24 +11,27 @@ class MtTextEditApp():
     _writers = []
     _reader_to_writer = {}
     _DELIMITER = b' \n\x1E'
-    _PERMISSION_FILE_PATH="/var/lib/mttext/permissions.txt"
+    _PERMISSION_FILE_PATH="/tmp/lib/mttext/permissions.txt"
 
     def __init__(self, username: str, filetext: str = "", debug=False, file_path=None):
         self.debug = debug
         self._model = Model(filetext, username, file_path)
         self._file_path = None
         self._is_host = file_path != None
-        self._func_by_user_key = {
+        self._can_write = True
+        self._non_edit_func_by_key = {
             curses.KEY_LEFT: self._model.user_pos_shifted_left,
             curses.KEY_RIGHT: self._model.user_pos_shifted_right,
             curses.KEY_DOWN: self._model.user_pos_shifted_down,
             curses.KEY_UP: self._model.user_pos_shifted_up,
-            curses.KEY_BACKSPACE: self._model.user_deleted_char,
-            10: self._model.user_added_new_line,  # ENTER
             337: self._model.user_shifted_up,  # SHIFT + UP
             336: self._model.user_shifted_down,  # SHIFT + DOWN
             393: self._model.user_shifted_left,  # SHIFT + LEFT
             402: self._model.user_shifted_right,  # SHIFT + RIGHT
+        }
+        self._edit_func_by_user_key = {
+            curses.KEY_BACKSPACE: self._model.user_deleted_char,
+            10: self._model.user_added_new_line,  # ENTER
             26: self._model.undo,  # CTRL + Z
             24: self._model.cut,  # CTRL + X
             25: self._model.redo  # CTRL + Y
@@ -76,9 +79,6 @@ class MtTextEditApp():
             with open(self._PERMISSION_FILE_PATH, 'w') as f:
                 f.write('')
 
-    async def _get_permissions(self, user):
-        pass
-
     def run(self):
         curses.wrapper(self._main)
 
@@ -97,15 +97,18 @@ class MtTextEditApp():
         await self._send_queue.put(item)
 
     async def _parse_key(self, key):
-        if key in self._func_by_user_key.keys():
-            await self._func_by_user_key[key](self._username)
+        if key in self._non_edit_func_by_key:
+            await self._non_edit_func_by_key[key](self._username)
             await self.send(self._get_msg_by_key[key](self._username))
-        elif key in self._func_by_special_key:
+        if key in self._edit_func_by_user_key.keys() and self._can_write:
+            await self._edit_func_by_user_key[key](self._username)
+            await self.send(self._get_msg_by_key[key](self._username))
+        elif key in self._func_by_special_key and (self._can_write or key != 22):
             await self._func_by_special_key[key]()
             if key in self._get_msg_by_key:
                 await self.send(self._get_msg_by_key[key](self._username))
         else:
-            if 32 <= key <= 126:
+            if 32 <= key <= 126 and self._can_write:
                 key_str = chr(key)
                 await self._model.user_wrote_char(self._username, key_str)
                 await self.send(
@@ -144,6 +147,9 @@ class MtTextEditApp():
             if args[1] == '-DCH':
                 await self.stop()
                 return
+            if args[1] == '-WNACK' and not self._is_host:
+                self._can_write =False
+                self._msg_parser.can_write = False
             await self._msg_parser.parse_message(args)
             if self._is_host:
                 await self.send(message)
@@ -193,12 +199,23 @@ class MtTextEditApp():
                 return
             permissions = self._permissions.get(args[0], "")
             if permissions == "":
+                try:
+                    writer.write(f'{self._username} -DCH'.encode() + self._DELIMITER)
+                    await writer.drain()
+                except:
+                    writer.close()
                 return
             if "r" in permissions:
                 self._writers.append(writer)
                 self._reader_to_writer[reader] = writer
                 if "w" in permissions:
-                    can_write = True 
+                    can_write = True
+                else:
+                    try:
+                        writer.write(f'{self._username} -WNACK'.encode() + self._DELIMITER)
+                        await writer.drain()
+                    except:
+                        writer.close()
         except:
             if self._is_host:
                 self._writers.remove(self._reader_to_writer[reader])
