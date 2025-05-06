@@ -91,6 +91,33 @@ class Model:
             for y in range(bot_y - 1, top_y, -1):
                 self.text_lines.pop(y)
 
+    async def _correct_pos_on_cut(self, username_to_correct, top, bot):
+        user_pos = self.user_positions[username_to_correct]
+        user_shifted_pos = self.shift_user_positions.get(username_to_correct)
+        if await self._is_pos_in_range(user_pos, top, bot):
+            user_pos = top
+        if user_pos[1] > bot[1]:
+            user_pos = (user_pos[0], user_pos[1] - (bot[1] - top[1]))
+        if user_pos[1] == bot[1] and user_pos[0] > bot[0]:
+            user_pos = (top[0] + user_pos[0] - bot[0], top[1])
+        if user_shifted_pos:
+            if await self._is_pos_in_range(user_shifted_pos, top, bot):
+                user_shifted_pos = top
+            if user_shifted_pos[1] > bot[1]:
+                user_shifted_pos = (
+                    user_shifted_pos[0], user_shifted_pos[1] - (bot[1] - top[1]))
+            if user_shifted_pos[1] == bot[1] and user_shifted_pos[0] > bot[0]:
+                user_shifted_pos = (
+                    top[0] + user_shifted_pos[0] - bot[0], top[1])
+        await self._set_user_pos(username_to_correct, user_pos, user_shifted_pos)
+
+# TODO: implement
+    async def _correct_redo_frame_on_cut(self, frame, top, bot):
+        pass
+
+    async def _correct_undo_frame_on_cut(self, frame, top, bot):
+        pass
+
     async def _get_range(self, top, bot):
         if bot[1] < top[1] or \
                 bot[1] == top[1] and bot[0] < top[0]:
@@ -106,6 +133,13 @@ class Model:
         return self.text_lines[top_y][top_x:] + '\n' + \
             t + \
             self.text_lines[bot_y][:bot_x]
+
+    async def _is_pos_in_range(self, pos, top, bot):
+        return top[1] < pos[1] and pos[1] < bot[1] or \
+            top[1] == pos[1] and top[0] < pos[0] and \
+            (bot[1] > pos[1] or bot[1] == pos[1] and pos[0] < bot[0]) or \
+            bot[1] == pos[1] and bot[0] > pos[0] and \
+            (top[1] < pos[1] or top[1] == pos[1] and top[0] < pos[0])
 
     async def _insert(self, text, pos):
         lines_to_paste = text.split('\n')
@@ -137,11 +171,10 @@ class Model:
                                       redo_func,
                                       redo_kwargs):
         async with self._action_stack_m:
-            self._reverted_action_stack_by_user[username].clear()
             self._action_stack_by_user[username].append(
-                (undo_func, undo_kwargs, redo_func, redo_kwargs))
+                [undo_func, undo_kwargs, redo_func, redo_kwargs])
 
-    async def _undo_selected_cut(self, username, user_pos, shifted_pos, text_cut):
+    async def _undo_selected_cut(self, username, user_pos, shifted_pos, text_cut, insert_list=None):
         if not shifted_pos:
             return
         top = user_pos
@@ -219,7 +252,9 @@ class Model:
 
     # all functions using this decorator, must have this arguments in specified order:
     # self, username, user_pos, shifted_pos for making correct action frames
-    def _handle_edit_decorator(undo_func, redo_func_name):
+    def _handle_edit_decorator(undo_func, redo_func_name, pos_correction_func=None,
+                               undo_frame_corrector=None,
+                               redo_frame_corrector=None):
         def dec(func):
             @wraps(func)
             async def wrapper(*args):
@@ -228,6 +263,15 @@ class Model:
                                'user_pos': user_pos,
                                'self': self}
                 if not shifted_pos:
+                    for user in self.users:
+                        if user == username:
+                            continue
+                        for frame in self._action_stack_by_user[user]:
+                            await undo_frame_corrector(self, frame, args)
+                        for frame in self._reverted_action_stack_by_user[user]:
+                            await redo_frame_corrector(self, frame, user_pos)
+                        if pos_correction_func:
+                            await pos_correction_func(self, user, args)
                     await self._append_to_action_stack(username, undo_func,
                                                        undo_kwargs, getattr(
                                                            Model, redo_func_name),
@@ -242,12 +286,32 @@ class Model:
                                                        Model, redo_func_name),
                                                    args)
                 await self._cut_selected_text(top, bot)
+                for user in self.users:
+                    if user == username:
+                        continue
+                    for frame in self._action_stack_by_user[user]:
+                        await self._correct_undo_frame_on_cut(frame, top, bot)
+                        await undo_frame_corrector(self, frame, args)
+                    for frame in self._reverted_action_stack_by_user[user]:
+                        await self._correct_redo_frame_on_cut(frame, top, bot)
+                        await redo_frame_corrector(self, frame, top)
+                    await self._correct_pos_on_cut(user, top, bot)
+                    await pos_correction_func(self, user, args)
                 async with self._users_pos_m:
-                    self.shift_user_positions.pop(username)
+                    if username in self.shift_user_positions:
+                        self.shift_user_positions.pop(username)
                     self.user_positions[username] = top
                 await func(*args)
             return wrapper
         return dec
+
+    def _after_edit_corrector_decor(func):
+        async def wrapper(*args):
+            self, username, *rest = args
+            async with self._action_stack_m:
+                self._reverted_action_stack_by_user[username].clear()
+            await func(*args)
+        return wrapper
 
     async def copy_to_buffer(self):
         if self._owner_username not in self.shift_user_positions:
@@ -265,7 +329,21 @@ class Model:
         await self._undo_selected_cut(username, user_pos, shifted_pos, text_cut)
         await self._set_user_pos(username, user_pos, shifted_pos)
 
-    @_handle_edit_decorator(_undo_paste, '_make_paste')
+
+# TODO: implement
+
+
+    async def _correct_redo_frame_after_paste(self, frame, called_from_args):
+        pass
+
+    async def _correct_undo_frame_after_paste(self, frame, called_from_args):
+        pass
+
+    async def _correct_pos_after_paste(self, username_to_correct, called_from_args):
+        pass
+
+    @_handle_edit_decorator(_undo_paste, '_make_paste', _correct_pos_after_paste,
+                            _correct_undo_frame_after_paste, _correct_redo_frame_after_paste)
     async def _make_paste(self, username, user_pos, shifted_pos, text_to_paste):
         new_pos = await self._insert(text_to_paste, self.user_positions[username])
         async with self._action_stack_m:
@@ -273,6 +351,7 @@ class Model:
         async with self._users_pos_m:
             self.user_positions[username] = new_pos
 
+    @_after_edit_corrector_decor
     async def paste(self, username, text_to_paste):
         async with self._action_stack_m:
             self._reverted_action_stack_by_user[username].clear()
@@ -297,7 +376,19 @@ class Model:
         await self._undo_selected_cut(username, user_pos, shift_pos, text_cut)
         await self._set_user_pos(username, user_pos, shift_pos)
 
-    @_handle_edit_decorator(_undo_user_wrote_char, '_make_write_char')
+# TODO: implement
+    async def _correct_redo_frame_write(self, frame, called_from_args):
+        pass
+
+    async def _correct_undo_frame_write(self, frame, called_from_args):
+        pass
+
+    async def _correct_pos_write(self, username_to_correct, called_from_args):
+        pass
+
+    @_handle_edit_decorator(_undo_user_wrote_char, '_make_write_char',
+                            _correct_pos_write, _correct_undo_frame_write,
+                            _correct_redo_frame_write)
     async def _make_write_char(self, username, user_pos, shifted_pos, char):
         user_x, user_y = user_pos
         async with self._text_m:
@@ -308,6 +399,7 @@ class Model:
                     char + self.text_lines[user_y][user_x:]
         await self.user_pos_shifted_right(username)
 
+    @_after_edit_corrector_decor
     async def user_wrote_char(self, username, char):
         async with self._action_stack_m:
             self._reverted_action_stack_by_user[username].clear()
@@ -387,7 +479,18 @@ class Model:
             await self._insert(text_cut, await self._shift_pos_left(user_pos))
         await self._set_user_pos(username, user_pos, shifted_pos)
 
-    @_handle_edit_decorator(_undo_delete_char, '_make_delete_char')
+# TODO: implement
+    async def _correct_redo_frame_after_del(self, frame, called_from_args):
+        pass
+
+    async def _correct_undo_frame_after_del(self, frame, called_from_args):
+        pass
+
+    async def _correct_pos_after_del(self, username_to_correct, called_from_args):
+        pass
+
+    @_handle_edit_decorator(_undo_delete_char, '_make_delete_char', _correct_pos_after_del,
+                            _correct_undo_frame_after_del, _correct_redo_frame_after_del)
     async def _make_delete_char(self, username, user_pos, shifted_pos):
         if shifted_pos:
             return
@@ -410,6 +513,7 @@ class Model:
                     self.text_lines[user_y][user_x:]
         await self.user_pos_shifted_left(username)
 
+    @_after_edit_corrector_decor
     async def user_deleted_char(self, username):
         async with self._action_stack_m:
             self._reverted_action_stack_by_user[username].clear()
@@ -418,12 +522,75 @@ class Model:
             self.shift_user_positions[username] if username in self.shift_user_positions
             else None)
 
-    async def _undo_new_line(self, username, user_pos, shifted_pos=None, text_cut=None):
+    async def _undo_new_line(self, username, user_pos, shifted_pos=None, text_cut=None, insert_list=None):
         await self._cut_selected_text(user_pos, (0, user_pos[1] + 1))
-        await self._undo_selected_cut(username, user_pos, shifted_pos, text_cut)
+        await self._undo_selected_cut(username, user_pos, shifted_pos, text_cut, insert_list)
         await self._set_user_pos(username, user_pos, shifted_pos)
 
-    @_handle_edit_decorator(_undo_new_line, '_make_new_line')
+    # returns (corrected_user_pos, corrected_user_shift_pos)
+
+    async def _make_pos_correct_after_new_line(self, action_pos, user_pos, shifted_pos=None):
+        if shifted_pos:
+            top, bot = await self._get_correct_top_bot_orientation(
+                user_pos, shifted_pos)
+            top_is_user_pos = top == user_pos
+            if action_pos[1] < top[1]:
+                top = (top[0], top[1] + 1)
+                bot = (bot[0], bot[1] + 1)
+            if action_pos[1] == top[1] and top[0] > action_pos[0]:
+                if bot[1] == top[1]:
+                    bot = (bot[0] - action_pos[0], bot[1] + 1)
+                else:
+                    bot = (bot[0], bot[1] + 1)
+                top = (top[0] - action_pos[0], top[1] + 1)
+            if await self._is_pos_in_range(action_pos, top, bot):
+                if bot[1] == action_pos[1]:
+                    bot = (bot[0] - action_pos[0], bot[1] + 1)
+                else:
+                    bot = (bot[0], bot[1] + 1)
+            return (top, bot) if top_is_user_pos else (bot, top)
+        if action_pos[1] < user_pos[1]:
+            user_pos = (user_pos[0], user_pos[1] + 1)
+        elif action_pos[1] == user_pos[1] and user_pos[0] > action_pos[0]:
+            user_pos = (user_pos[0] - action_pos[0], user_pos[1] + 1)
+        return (user_pos, shifted_pos)
+
+    async def _correct_pos_after_new_line(self, username_to_correct, called_from_args):
+        s, username, *rest = called_from_args
+        new_pos, new_shifted_pos = await self._make_pos_correct_after_new_line(
+            self.user_positions[username],
+            self.user_positions[username_to_correct],
+            self.shift_user_positions.get(username_to_correct)
+        )
+        async with self._users_pos_m:
+            self.user_positions[username_to_correct] = new_pos
+            if new_shifted_pos:
+                self.shift_user_positions[username_to_correct] = new_shifted_pos
+
+# TODO: implement
+    async def _correct_redo_frame_after_new_line(self, frame, action_pos):
+        s, frame_username, frame_pos, frame_shifted_pos = frame[1]
+        frame_pos, frame_shifted_pos = await self._make_pos_correct_after_new_line(
+            action_pos, frame_pos, frame_shifted_pos)
+        frame[1] = [s, frame_username, frame_pos, frame_shifted_pos]
+
+    async def _correct_frame_after_new_line(self, frame, called_from_args):
+        undo_func, undo_kwargs, redo_func, redo_args = frame
+        s, username, *rest = called_from_args
+        user_pos = self.user_positions[username]
+        action_pos = undo_kwargs['user_pos']
+        action_shifted_pos = undo_kwargs.get('shifted_pos')
+        corrected_pos, corrected_shift_pos = await self._make_pos_correct_after_new_line(
+            user_pos, action_pos, action_shifted_pos)
+        undo_kwargs['user_pos'] = corrected_pos
+        if corrected_shift_pos:
+            undo_kwargs['shifted_pos'] = corrected_shift_pos
+        frame[3] = (s, redo_args[1], corrected_pos, corrected_shift_pos)
+
+    @_handle_edit_decorator(_undo_new_line, '_make_new_line',
+                            _correct_pos_after_new_line,
+                            _correct_frame_after_new_line,
+                            _correct_redo_frame_after_new_line)
     async def _make_new_line(self, username, user_pos, shifted_pos):
         user_x, user_y = user_pos
         async with self._text_m:
@@ -433,11 +600,8 @@ class Model:
         async with self._users_pos_m:
             self.user_positions[username] = (0, user_y + 1)
 
+    @_after_edit_corrector_decor
     async def user_added_new_line(self, username):
-        async with self._action_stack_m:
-            # TODO: clear forall users in all functions
-            self._reverted_action_stack_by_user[username].clear()
-
         user_pos = self.user_positions[username]
         if username in self.shift_user_positions:
             shifted_pos = self.shift_user_positions[username]
@@ -452,7 +616,7 @@ class Model:
             revert_func, revert_kwargs, redo_func, redo_args = \
                 self._action_stack_by_user[username].pop()
             self._reverted_action_stack_by_user[username].append(
-                (redo_func, redo_args))
+                [redo_func, redo_args])
         await revert_func(**revert_kwargs)
 
     async def redo(self, username):
