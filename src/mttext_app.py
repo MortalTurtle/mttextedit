@@ -11,6 +11,7 @@ class MtTextEditApp():
     _writers = []
     _reader_to_writer = {}
     _DELIMITER = b' \n\x1E'
+    _PERMISSION_FILE_PATH="/var/lib/mttext/permissions.txt"
 
     def __init__(self, username: str, filetext: str = "", debug=False, file_path=None):
         self.debug = debug
@@ -58,6 +59,25 @@ class MtTextEditApp():
         self._msg_parser = MessageParser(self._model, self._is_host, username)
         self._send_queue = asyncio.Queue()
         self._msg_queue = asyncio.Queue()
+        self._load_permissions()
+
+
+    def _load_permissions(self):
+        if not self._is_host:
+            return
+        self._permissions = {}
+        try:
+            with open(self._PERMISSION_FILE_PATH, 'r') as f:
+                for line in f:
+                    if ':' in line:
+                        user, rights = line.strip().split(':')
+                        self._permissions[user] = rights
+        except FileNotFoundError:
+            with open(self._PERMISSION_FILE_PATH, 'w') as f:
+                f.write('')
+
+    async def _get_permissions(self, user):
+        pass
 
     def run(self):
         curses.wrapper(self._main)
@@ -164,11 +184,29 @@ class MtTextEditApp():
         user_pos = [await self._model.get_user_pos(
             x) for x in self._model.users]
         user_pos_strings = [f"{x[0]} {x[1]}" for x in user_pos]
-        self._writers.append(writer)
-        self._reader_to_writer[reader] = writer
+        can_write = False
+        try:
+            data = await reader.readuntil(self._DELIMITER)
+            message = data.decode()
+            args = message.split(' ')
+            if args[1] != '-C':
+                return
+            permissions = self._permissions.get(args[0], "")
+            if permissions == "":
+                return
+            if "r" in permissions:
+                self._writers.append(writer)
+                self._reader_to_writer[reader] = writer
+                if "w" in permissions:
+                    can_write = True 
+        except:
+            if self._is_host:
+                self._writers.remove(self._reader_to_writer[reader])
+            return
         await self.send(f"{self._username} -U {' '.join([f"{x[0]} {x[1]}" for x in zip(self._model.users, user_pos_strings)])}")
         await self.send(f"{self._username} -T {'\n'.join(self._model.text_lines)}")
-        await self._consumer_handler(reader)
+        if can_write:
+            await self._consumer_handler(reader)
 
     def _main(self, *args, **kwargs):
         asyncio.run(self._async_main(*args, **kwargs))

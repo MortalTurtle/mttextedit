@@ -20,7 +20,7 @@ class Model:
     # each stack stores (redo_func: courutine, redo_args: list)
     # redo_func must crate new action frame for action stack
 
-    def __init__(self, text: str, owner_username, permissions_file = 'permissions.txt', file_path=None):
+    def __init__(self, text: str, owner_username, file_path=None):
         self._stop = False
         self._owner_username = owner_username
         self._file_path = file_path
@@ -31,31 +31,7 @@ class Model:
         self.text_lines = text.splitlines()
         if text == "":
             self.text_lines = [""]
-        self._permissions = {}
-        self._permissions_file = permissions_file
-        self._load_permissions()
 
-    def _load_permissions(self):
-        try:
-            with open(self._permissions_file, 'r') as f:
-                for line in f:
-                    if ':' in line:
-                        user, rights = line.strip().split(':')
-                        self._permissions[user] = rights
-        except FileNotFoundError:
-            pass
-            
-    async def _check_permission(self, username, required_right):
-        if username == self._owner_username:
-            return True
-        if username not in self._permissions:
-            return False
-        user_rights = self._permissions[username]
-        if required_right == 'read':
-            return user_rights in ['r', 'rw']
-        if required_right == 'write':
-            return user_rights == 'rw'
-        return False
 
     async def get_user_pos(self, username):
         async with self._users_pos_m:
