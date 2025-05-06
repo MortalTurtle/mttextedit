@@ -3,13 +3,42 @@ from mttext_app import MtTextEditApp
 import sys
 import argparse
 
+def manage_permissions(permissions_file, username, access_rights):
+    permissions_file = 'permissions.txt'
+    if access_rights not in ['rw', 'r', 'n']:
+        return False
+    try:
+        permissions = {}
+        try:
+            with open(permissions_file, 'r') as f:
+                for line in f:
+                    if ':' in line:
+                        user, rights = line.strip().split(':')
+                        permissions[user] = rights
+        except FileNotFoundError:
+            pass
+        permissions[username] = access_rights
+        with open(permissions_file, 'w') as f:
+            for user, rights in permissions.items():
+                f.write(f"{user}:{rights}\n")
+                
+        print(f"Updated permissions for {username} to {access_rights} in {permissions_file}")
+        return True
+    except Exception as e:
+        print(f"Error managing permissions: {e}")
+        return False
 
 def connect_to_session(debug, conn_ip, username):
     r = re.compile(r"(\d{1,3}\.){3}\d{1,3}")
     if not r.match(conn_ip):
         print("Wrong connection ip address")
         return 0
-    socket = MtTextEditApp(username, debug=debug)
+    with open('permissions.txt', 'r') as f:
+        permissions = dict(line.strip().split(':') for line in f if ':' in line)
+        if username not in permissions or permissions[username] == 'n':
+            print(f"User {username} has no access rights.")
+            return 0 
+    socket = MtTextEditApp(username, debug=debug, permissions_file='permissions.txt')
     socket.connect(conn_ip)
 
 
@@ -43,8 +72,13 @@ def main():
     parser.add_argument('-C', nargs=2,
                         metavar=('CONN_IP', 'USERNAME'),
                         help='Connect to session')
+    parser.add_argument('-P', nargs=3,
+                   metavar=('PERMISSIONS_FILE', 'USERNAME', 'ACCESS_RIGHTS'),
+                   help='Manage user permissions (rw - read/write, r - read only, n - no access)')
     try:
         args = parser.parse_args()
+        if args.P:
+            manage_permissions(args.P[0], args.P[1], args.P[2])
         if args.C:
             connect_to_session(args.debug, args.C[0], args.C[1])
         if args.H:

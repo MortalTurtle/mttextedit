@@ -89,4 +89,9 @@ class MessageParser:
             return
         if args[0] == self._username or args[0] not in self._model.users:
             return
+        if not await self._model._check_permission(args[0], 'read'):
+            return
+        if args[1] in ['-E', '-D', '-NL', '-PASTE', '-CUT', '-UNDO', '-REDO']:
+            if not await self._model._check_permission(args[0], 'write'):
+                return
         await self._handler_func_by_arg[args[1]](args)
