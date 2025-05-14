@@ -32,6 +32,7 @@ class Model:
         if text == "":
             self.text_lines = [""]
 
+
     async def get_user_pos(self, username):
         async with self._users_pos_m:
             return self.user_positions[username]
