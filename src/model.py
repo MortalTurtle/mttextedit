@@ -1,6 +1,7 @@
 from asyncio import Lock
 from functools import wraps
 import time
+from file_handler import FileHandler
 from view import View
 
 
@@ -29,21 +30,17 @@ class Model:
         self._action_stack_by_user[owner_username] = []
         self._reverted_action_stack_by_user[owner_username] = []
         self.text_lines = text.splitlines()
+        self._file_handler = FileHandler(file_path)
         if text == "":
             self.text_lines = [""]
-
 
     async def get_user_pos(self, username):
         async with self._users_pos_m:
             return self.user_positions[username]
 
     async def save_file(self):
-        if self._file_path == None:
-            return
         async with self._text_m:
-            with open(self._file_path, "w") as f:
-                text = "\n".join(self.text_lines)
-                f.write(text)
+            await self._file_handler.save_file(self.text_lines)
 
     async def user_disconnected(self, username):
         async with self._users_m, self._users_pos_m:
@@ -744,3 +741,8 @@ class Model:
             redo_func, redo_args = \
                 self._reverted_action_stack_by_user[username].pop()
         await redo_func(*redo_args)
+
+    async def save_changes_history(self):
+        if not self._file_path:
+            return
+        await self._file_handler.session_ended()

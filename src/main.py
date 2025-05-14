@@ -1,3 +1,4 @@
+import collections
 import re
 from mttext_app import MtTextEditApp
 import sys
@@ -5,6 +6,18 @@ import argparse
 import os
 
 PERMISSION_FILE = '/tmp/lib/mttext/permissions'
+HISTORY_FILE_PATH = "/tmp/lib/mttext/history/"
+
+# TODO: implement correct division for files with same filename
+
+
+def list_all_saved_history(file_path):
+    file_name = file_path[file_path.rfind('/'):]
+    files = os.listdir(HISTORY_FILE_PATH + file_name + '/')
+    i = 1
+    for hist_file in filter(lambda x: '.o.cache' not in x, files):
+        print(hist_file[:hist_file.rfind('.')] + f'\t{i}')
+        i += 1
 
 
 def get_permissions():
@@ -77,7 +90,7 @@ def main():
         description="multi-user text editor",
         epilog=":)",
         usage="%(prog)s [-D] (-H FILE_PATH USERNAME | -C CONN_IP USERNAME | \
-        -P USERNAME ACCESS_RIGHTS | -Pl)"
+        -P USERNAME ACCESS_RIGHTS | -Pl | -CHH FILE_PATH)"
     )
     parser.add_argument('-D', action='store_true', default=False,
                         dest='debug',
@@ -93,6 +106,9 @@ def main():
                         help='Manage user permissions + to add, - to remove (rw - read/write, r - read only)')
     parser.add_argument('-Pl', action='store_true', default=False,
                         help="List all permissions")
+    parser.add_argument('-CHH', nargs=1,
+                        metavar=('FILE_PATH'),
+                        help='List all availible history changes for file')
     try:
         args = parser.parse_args()
         if args.Pl:
@@ -103,6 +119,8 @@ def main():
             connect_to_session(args.debug, args.C[0], args.C[1])
         if args.H:
             host_session(args.debug, args.H[0], args.H[1])
+        if args.CHH:
+            list_all_saved_history(args.CHH[0])
     except:
         parser.print_help()
 

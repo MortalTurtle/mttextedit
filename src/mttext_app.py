@@ -85,6 +85,7 @@ class MtTextEditApp():
         curses.wrapper(self._main, True, conn_ip)
 
     async def stop(self):
+        await self._model.save_changes_history()
         await self.send(f"{self._username} " + ("-DCH" if self._is_host else "-DC"))
         await asyncio.sleep(0.1)
         if self._writer:
@@ -224,6 +225,7 @@ class MtTextEditApp():
         await self.send(f"{self._username} -U {' '.join([f"{x[0]} {x[1]}" for x in zip(self._model.users, user_pos_strings)])}")
         await self.send(f"{self._username} -T {'\n'.join(self._model.text_lines)}")
         if can_write:
+            await self._model.add_user(args[0])
             await self._consumer_handler(reader)
 
     def _main(self, *args, **kwargs):
