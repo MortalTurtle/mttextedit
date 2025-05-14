@@ -4,28 +4,49 @@ import sys
 import argparse
 import os
 
+PERMISSION_FILE = '/tmp/lib/mttext/permissions'
+
+
+def get_permissions():
+    permissions = {}
+    try:
+        with open(PERMISSION_FILE, 'r') as f:
+            for line in f:
+                if ':' in line:
+                    user, rights = line.strip().split(':')
+                    permissions[user] = rights
+    except FileNotFoundError:
+        os.makedirs(os.path.dirname(PERMISSION_FILE), exist_ok=True)
+    return permissions
+
+
+def list_permissions():
+    permissions = get_permissions()
+    for user, rights in permissions.items():
+        print(f"{user}:{rights}")
+
+
 def manage_permissions(username, access_rights):
-    permissions_file = '/tmp/lib/mttext/permissions.txt'
-    if access_rights not in ['rw', 'r']:
+    sign = access_rights[0]
+    access_rights = access_rights[1:]
+    if access_rights not in ['rw', 'r'] or (sign != '+' and sign != '-'):
         return False
     try:
-        permissions = {}
-        try:
-            with open(permissions_file, 'r') as f:
-                for line in f:
-                    if ':' in line:
-                        user, rights = line.strip().split(':')
-                        permissions[user] = rights
-        except FileNotFoundError:
-            os.makedirs(os.path.dirname(permissions_file), exist_ok=True)
-        permissions[username] = access_rights
-        with open(permissions_file, 'w') as f:
+        permissions = get_permissions()
+        if sign == '+':
+            if access_rights == 'rw' or access_rights == 'r' and \
+                    permissions.get(username, '') != 'rw':
+                permissions[username] = access_rights
+        elif username in permissions:
+            permissions.pop(username)
+        with open(PERMISSION_FILE, 'w') as f:
             for user, rights in permissions.items():
                 f.write(f"{user}:{rights}\n")
         return True
     except Exception as e:
         print(f"Error managing permissions: {e}")
         return False
+
 
 def connect_to_session(debug, conn_ip, username):
     r = re.compile(r"(\d{1,3}\.){3}\d{1,3}")
@@ -55,7 +76,8 @@ def main():
         prog="mtrtext",
         description="multi-user text editor",
         epilog=":)",
-        usage="%(prog)s [-D] (-H FILE_PATH USERNAME | -C CONN_IP USERNAME | -P USERNAME ACCESS_RIGHTS)"
+        usage="%(prog)s [-D] (-H FILE_PATH USERNAME | -C CONN_IP USERNAME | \
+        -P USERNAME ACCESS_RIGHTS | -Pl)"
     )
     parser.add_argument('-D', action='store_true', default=False,
                         dest='debug',
@@ -67,10 +89,14 @@ def main():
                         metavar=('CONN_IP', 'USERNAME'),
                         help='Connect to session')
     parser.add_argument('-P', nargs=2,
-                   metavar=('USERNAME', 'ACCESS_RIGHTS'),
-                   help='Manage user permissions (rw - read/write, r - read only, n - no access)')
+                        metavar=('USERNAME', 'ACCESS_RIGHTS'),
+                        help='Manage user permissions + to add, - to remove (rw - read/write, r - read only)')
+    parser.add_argument('-Pl', action='store_true', default=False,
+                        help="List all permissions")
     try:
         args = parser.parse_args()
+        if args.Pl:
+            list_permissions()
         if args.P:
             manage_permissions(args.P[0], args.P[1])
         if args.C:

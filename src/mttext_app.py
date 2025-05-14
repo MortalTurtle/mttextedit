@@ -11,7 +11,7 @@ class MtTextEditApp():
     _writers = []
     _reader_to_writer = {}
     _DELIMITER = b' \n\x1E'
-    _PERMISSION_FILE_PATH="/tmp/lib/mttext/permissions.txt"
+    _PERMISSION_FILE_PATH = "/tmp/lib/mttext/permissions"
 
     def __init__(self, username: str, filetext: str = "", debug=False, file_path=None):
         self.debug = debug
@@ -63,7 +63,6 @@ class MtTextEditApp():
         self._send_queue = asyncio.Queue()
         self._msg_queue = asyncio.Queue()
         self._load_permissions()
-
 
     def _load_permissions(self):
         if not self._is_host:
@@ -148,7 +147,7 @@ class MtTextEditApp():
                 await self.stop()
                 return
             if args[1] == '-WNACK' and not self._is_host:
-                self._can_write =False
+                self._can_write = False
                 self._msg_parser.can_write = False
             await self._msg_parser.parse_message(args)
             if self._is_host:
@@ -200,7 +199,8 @@ class MtTextEditApp():
             permissions = self._permissions.get(args[0], "")
             if permissions == "":
                 try:
-                    writer.write(f'{self._username} -DCH'.encode() + self._DELIMITER)
+                    writer.write(
+                        f'{self._username} -DCH'.encode() + self._DELIMITER)
                     await writer.drain()
                 except:
                     writer.close()
@@ -212,7 +212,8 @@ class MtTextEditApp():
                     can_write = True
                 else:
                     try:
-                        writer.write(f'{self._username} -WNACK'.encode() + self._DELIMITER)
+                        writer.write(
+                            f'{self._username} -WNACK'.encode() + self._DELIMITER)
                         await writer.drain()
                     except:
                         writer.close()
