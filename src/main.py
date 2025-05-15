@@ -9,6 +9,7 @@ PERMISSION_FILE = '/tmp/lib/mttext/permissions'
 HISTORY_FILE_PATH = "/tmp/lib/mttext/history/"
 
 # TODO: implement correct division for files with same filename
+# TODO: correct displaying of changes
 
 
 def list_all_saved_history(file_path):
@@ -18,6 +19,10 @@ def list_all_saved_history(file_path):
     for hist_file in filter(lambda x: '.o.cache' not in x, files):
         print(hist_file[:hist_file.rfind('.')] + f'\t{i}')
         i += 1
+
+
+def print_changes(file_path, changes_index):
+    pass
 
 
 def get_permissions():
@@ -90,7 +95,7 @@ def main():
         description="multi-user text editor",
         epilog=":)",
         usage="%(prog)s [-D] (-H FILE_PATH USERNAME | -C CONN_IP USERNAME | \
-        -P USERNAME ACCESS_RIGHTS | -Pl | -CHH FILE_PATH)"
+        -P USERNAME ACCESS_RIGHTS | -Pl | -CHH FILE_PATH | -CH FILE_PATH INDEX)"
     )
     parser.add_argument('-D', action='store_true', default=False,
                         dest='debug',
@@ -109,6 +114,9 @@ def main():
     parser.add_argument('-CHH', nargs=1,
                         metavar=('FILE_PATH'),
                         help='List all availible history changes for file')
+    parser.add_argument('-CH', nargs=2,
+                        metavar=('FILE_PATH', 'INDEX'),
+                        help='Show history for file from i-th session')
     try:
         args = parser.parse_args()
         if args.Pl:

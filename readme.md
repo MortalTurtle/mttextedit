@@ -40,13 +40,3 @@ multi-user text editor
     [sender_username] -WNACK / writing forbidden
 
 #changes info in changes cache:
-
-    -nl [y] / line added 
-
-    -dl [y] / line deleted
-
-    -at [y] [x] / added text
-
-    -mt [y] [x start] [x end] / text modified
-
-    -dt [y] [x] [text] / text deleted

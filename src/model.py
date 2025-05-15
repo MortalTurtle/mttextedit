@@ -1,7 +1,7 @@
 from asyncio import Lock
 from functools import wraps
 import time
-from file_handler import FileHandler
+from history_handler import HistoryHandler
 from view import View
 
 
@@ -30,7 +30,7 @@ class Model:
         self._action_stack_by_user[owner_username] = []
         self._reverted_action_stack_by_user[owner_username] = []
         self.text_lines = text.splitlines()
-        self._file_handler = FileHandler(file_path)
+        self._file_handler = HistoryHandler(file_path)
         if text == "":
             self.text_lines = [""]
 
