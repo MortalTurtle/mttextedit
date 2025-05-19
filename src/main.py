@@ -9,20 +9,34 @@ PERMISSION_FILE = '/tmp/lib/mttext/permissions'
 HISTORY_FILE_PATH = "/tmp/lib/mttext/history/"
 
 # TODO: implement correct division for files with same filename
-# TODO: correct displaying of changes
 
 
 def list_all_saved_history(file_path):
     file_name = file_path[file_path.rfind('/'):]
+    os.makedirs(os.path.dirname(HISTORY_FILE_PATH +
+                file_name + '/'), exist_ok=True)
     files = os.listdir(HISTORY_FILE_PATH + file_name + '/')
+    files.sort()
     i = 1
     for hist_file in filter(lambda x: '.o.cache' not in x, files):
         print(hist_file[:hist_file.rfind('.')] + f'\t{i}')
         i += 1
 
 
-def print_changes(file_path, changes_index):
-    pass
+def show_changes(file_path, changes_index):
+    file_name = file_path[file_path.rfind('/'):]
+    file_list = os.listdir(
+        HISTORY_FILE_PATH + file_name + '/')
+    file_list.sort()
+    files = list(filter(lambda x: '.o.cache' in x, file_list))
+    try:
+        with open(HISTORY_FILE_PATH + file_name + '/' + files[int(changes_index) - 1], 'r') as f:
+            filetext = f.read()
+    except:
+        print('no such changes file found, :(')
+        return
+    app = MtTextEditApp("view_changes", filetext)
+    app.show_changes(file_name, files[int(changes_index) - 1])
 
 
 def get_permissions():
@@ -129,6 +143,8 @@ def main():
             host_session(args.debug, args.H[0], args.H[1])
         if args.CHH:
             list_all_saved_history(args.CHH[0])
+        if args.CH:
+            show_changes(args.CH[0], args.CH[1])
     except:
         parser.print_help()
 

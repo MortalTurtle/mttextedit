@@ -39,4 +39,3 @@ multi-user text editor
 
     [sender_username] -WNACK / writing forbidden
 
-#changes info in changes cache:

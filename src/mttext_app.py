@@ -1,5 +1,6 @@
 import asyncio
 import curses
+from history_handler import HistoryHandler
 from message_parser import MessageParser
 from model import Model
 
@@ -83,6 +84,10 @@ class MtTextEditApp():
 
     def connect(self, conn_ip):
         curses.wrapper(self._main, True, conn_ip)
+
+    def show_changes(self, filename, changes_file):
+        self._can_write = False
+        curses.wrapper(self._show_changes_main, filename, changes_file)
 
     async def stop(self):
         await self._model.save_changes_history()
@@ -230,6 +235,19 @@ class MtTextEditApp():
 
     def _main(self, *args, **kwargs):
         asyncio.run(self._async_main(*args, **kwargs))
+
+    def _show_changes_main(self, *args, **kwargs):
+        asyncio.run(self._show_changes_async_main(*args, **kwargs))
+
+    async def _show_changes_async_main(self, stdscr, filename, changes_file):
+        self.stdscr = stdscr
+        self._stop = False
+        history_handler = HistoryHandler()
+        await asyncio.gather(
+            history_handler.show_changes(
+                filename, changes_file, self._model, stdscr),
+            self._input_handler()
+        )
 
     async def _async_main(self, stdscr, should_connect=False, conn_ip=''):
         self.stdscr = stdscr

@@ -1,6 +1,9 @@
+import asyncio
 import datetime
 import os
 import shutil
+import time
+from view import View
 
 
 class HistoryHandler:
@@ -11,8 +14,12 @@ class HistoryHandler:
     _changes_frames = []
     _deleted_lines = []
     _modified_lines = {}
+    _DELIMITER = b' \n\x1E'
+    _op_cnt = 0
+    _file_path = None
 
     def __init__(self, file_path=None):
+        self._session_start = datetime.datetime.now()
         if not file_path:
             return
         self._file_path = file_path
@@ -20,7 +27,6 @@ class HistoryHandler:
         self._HISTORY_FILE_PATH += file_name + '/'
         os.makedirs(os.path.dirname(self._HISTORY_FILE_PATH), exist_ok=True)
         os.makedirs(os.path.dirname(self._CACHE_PATH), exist_ok=True)
-        self._save_base_version()
 
     async def _is_pos_in_range(self, pos, top, bot):
         return top[1] < pos[1] and pos[1] < bot[1] or \
@@ -46,6 +52,20 @@ class HistoryHandler:
             pos = (pos[0] - (bot[0] - top[0]), top[1])
         return pos
 
+    async def _cut_selected(self, top, bot, text_lines):
+        bot_x, bot_y = bot
+        top_x, top_y = top
+        if bot_y == top_y:
+            text_lines[bot_y] = text_lines[bot_y][:top_x] + \
+                text_lines[bot_y][bot_x:]
+        else:
+            text_lines[top_y] = text_lines[top_y][:top_x] + \
+                text_lines[bot_y][bot_x:]
+            text_lines.pop(bot_y)
+        for y in range(bot_y - 1, top_y, -1):
+            text_lines.pop(y)
+        return text_lines
+
     async def _get_range(self, text_lines, top, bot):
         if bot[1] < top[1] or \
                 bot[1] == top[1] and bot[0] < top[0]:
@@ -62,28 +82,80 @@ class HistoryHandler:
             t + \
             text_lines[bot_y][:bot_x]
 
-    # TODO: correct all other changes
+    async def _normalize_pos(self, pos, offset_pos):
+        if pos[1] == offset_pos[1]:
+            pos = (pos[0] - offset_pos[0], pos[1] - offset_pos[1])
+        else:
+            pos = (pos[0], pos[1] - offset_pos[1])
+
+    async def _currect_frame_and_op_on_cut(self, frame, top, bot, cut_text: str):
+        cut_lines = cut_text.split('\n')
+        if len(cut_lines) == 1:
+            bot = (len(cut_lines[0]) + top[0], top[1])
+        else:
+            bot = (len(cut_lines[-1]), top[1] + len(cut_lines) - 1)
+        type, frame_top, frame_bot, *rest = frame
+        if type == 'cut':
+            frame[1] = await self._make_pos_correct_on_insert(top, bot, frame_top)
+            return (top, bot, cut_text)
+        if await self._is_pos_in_range(top, frame_top, frame_bot) and await self._is_pos_in_range(bot, frame_top, frame_bot):
+            frame[2] = await self._make_pos_correct_after_cut(top, bot, frame_bot)
+            return [(0, 0), (0.0), '']
+        elif await self._is_pos_in_range(frame_top, top, bot) and await self._is_pos_in_range(frame_bot, top, bot):
+            frame[2] = frame[3]
+            cut_top = frame_top
+            cut_bot = frame_bot
+            cut_top = await self._normalize_pos(cut_top, top)
+            cut_bot = await self._normalize_pos(cut_bot, top)
+            return [top, bot, '\n'.join(await self._cut_selected(cut_top, cut_bot), cut_text.split('\n'))]
+        elif await self._is_pos_in_range(frame_top, top, bot):
+            frame[1] = top
+            frame[2] = await self._make_pos_correct_after_cut(top, bot, frame_bot)
+            cut_top = top
+            cut_bot = frame_top
+            cut_bot = await self._normalize_pos(cut_bot, top)
+            cut_top = (0, 0)
+            bot = frame_top
+            return [top, bot, '\n'.join(await self._get_range(cut_lines, cut_top, cut_bot))]
+        elif await self._is_pos_in_range(frame_bot, top, bot):
+            frame[2] = top
+            cut_top = frame_bot
+            cut_bot = bot
+            cut_top = await self._normalize_pos(cut_top, top)
+            cut_bot = await self._normalize_pos(cut_bot, top)
+            bot = await self._make_pos_correct_after_cut(top, frame_bot, bot)
+            return [top, bot, '\n'.join(await self._get_range(cut_lines, cut_top, cut_bot))]
+        else:
+            frame[1] = await self._make_pos_correct_on_insert(top, bot, frame_top)
+            frame[2] = await self._make_pos_correct_on_insert(top, bot, frame_bot)
+        return [top, bot, cut_text]
 
     async def user_cut_save_history(self, username, text_lines, top, bot):
-        for frame in self._changes_frames:
-            type, frame_top, frame_bot = frame
-            if type == 'cut':
-                frame[1] = await self._make_pos_correct_after_cut(top, bot, frame_top)
-            if self._is_pos_in_range(frame_top) or self._is_pos_in_range(frame_bot, top, bot):
-                pass
+        if not self._file_path:
+            return
+        self._op_cnt += 1
         self._changes_frames.append(
-            ['cut', top, bot, await self._get_range(top, bot)])
+            ['cut', top, bot, await self._get_range(text_lines, top, bot)])
+        return self._op_cnt
 
-    async def correct_history_on_undo_cut(self, username, text_lines, top, bot):
-        pass
+    async def correct_history_on_undo_cut(self, username, op_cnt):
+        if not self._file_path:
+            return
+        self._changes_frames.pop(op_cnt - 1)
 
     async def new_text_save_history(self, username, top, bot):
+        if not self._file_path:
+            return
+        self._op_cnt += 1
         self._changes_frames.append(
             ['insert', top, bot]
         )
+        return self._op_cnt
 
-    async def correct_history_on_undo_paste(self, username, top, bot):
-        pass
+    async def correct_history_on_undo_paste(self, username, op_cnt):
+        if not self._file_path:
+            return
+        self._changes_frames.pop(op_cnt - 1)
 
     def _save_base_version(self):
         with open(self._file_path, 'r') as f:
@@ -91,33 +163,70 @@ class HistoryHandler:
             with open(self._BASE_CACHE_PATH, 'w') as f:
                 f.write(filetext)
 
-    # rewrite using new changes history system
     async def _save_changes(self, text_lines):
-        with open(self._BASE_CACHE_PATH, 'r') as f:
-            base = f.read()
-        base_lines = base.split('\n')
-        changes = []
         with open(self._CHANGES_CACHE_PATH, 'w') as f:
-            for change in changes:
-                f.write(change)
+            for frame in self._changes_frames:
+                f.write(
+                    f"{frame[0]} {frame[1][0]} {frame[1][1]} {frame[2][0]} {frame[2][1]} {frame[3] if frame[0] == 'cut' else ""}{self._DELIMITER}")
+        shutil.copy(self._file_path, self._HISTORY_FILE_PATH +
+                    str(self._session_start) + '.o.cache')
 
     async def save_file(self, text_lines):
         if self._file_path == None:
             return
-        await self._save_changes(text_lines)
         with open(self._file_path, "w") as f:
             text = "\n".join(text_lines)
             f.write(text)
+        await self._save_changes(text_lines)
+
+    async def show_changes(self, filename, history_file: str, model, stdscr):
+        history_file = history_file.replace('.o.cache', '.cache')
+        with open(self._HISTORY_FILE_PATH + filename + '/' + history_file, 'r') as f:
+            changes_text = f.read()
+            changes = changes_text.split(str(self._DELIMITER))
+            for change in changes:
+                args = change.split(' ')
+                if len(args) < 5:
+                    continue
+                op_type, top_x, top_y, bot_x, bot_y, *rest = args
+                top_x = int(top_x)
+                top_y = int(top_y)
+                bot_x = int(bot_x)
+                bot_y = int(bot_y)
+                self._changes_frames.append(
+                    [op_type, (top_x, top_y), (bot_x, bot_y)])
+                if op_type == 'cut':
+                    cut_text = rest[0]
+                    self._changes_frames[-1].append(cut_text)
+        for i in range(len(self._changes_frames)):
+            frame = self._changes_frames[i]
+            if frame[0] == 'cut':
+                op_type, top, bot, cut_text, *rest = frame
+            else:
+                continue
+            for j in range(len(self._changes_frames)):
+                if j == i:
+                    continue
+                top, bot, cut_text = await self._currect_frame_and_op_on_cut(self._changes_frames[j], top, bot, cut_text)
+            frame[1] = top
+            frame[2] = bot
+            frame[3] = cut_text
+            await model._make_paste('view_changes', top, None, cut_text)
+        await self._show_changes_view(stdscr, model)
+
+    async def _show_changes_view(self, stdscr, model):
+        view = View(stdscr, 'view_changes')
+        while True:
+            view.draw_text(
+                model.text_lines, model.user_positions, model.users, model.shift_user_positions, self._changes_frames)
+            await asyncio.sleep(0.05)
+        pass
 
     async def session_ended(self):
         if not self._file_path:
             return
-        session_end = datetime.datetime.now()
         with open(self._CHANGES_CACHE_PATH, "r") as f:
             changes = f.readlines()
-        with open(self._HISTORY_FILE_PATH + str(session_end) + '.cache', 'w') as f:
+        with open(self._HISTORY_FILE_PATH + str(self._session_start) + '.cache', 'w') as f:
             f.write('\n'.join(changes))
-        shutil.copy(self._file_path, self._HISTORY_FILE_PATH +
-                    str(session_end) + '.o.cache')
-        os.remove(self._BASE_CACHE_PATH)
         os.remove(self._CHANGES_CACHE_PATH)
