@@ -17,7 +17,7 @@ class MtTextEditApp():
     def __init__(self, username: str, filetext: str = "", debug=False, file_path=None):
         self.debug = debug
         self._model = Model(filetext, username, file_path)
-        self._file_path = None
+        self._file_path = file_path
         self._is_host = file_path != None
         self._can_write = True
         self._converter = TextExporter(self._model.text_lines)
@@ -36,11 +36,7 @@ class MtTextEditApp():
             10: self._model.user_added_new_line,  # ENTER
             26: self._model.undo,  # CTRL + Z
             24: self._model.cut,  # CTRL + X
-            25: self._model.redo , # CTRL + Y
-            16: self.save_as_pdf, #+p
-            8: self.save_as_html,#+h
-            4:  self.save_as_doc #+d
-
+            25: self._model.redo,  # CTRL + Y
         }
         self._get_msg_by_key = {
             curses.KEY_BACKSPACE: lambda x: f"{x} -D",
@@ -63,31 +59,30 @@ class MtTextEditApp():
             27: self.stop,  # ESC
             3: self._model.copy_to_buffer,  # CTRL + C
             22: self._model.paste_from_buffer,  # CTRL + V
-
+            16: self.save_as_pdf,  # +p
+            8: self.save_as_html,  # +h
+            4:  self.save_as_doc  # +d
         }
         self._username = username
         self._msg_parser = MessageParser(self._model, self._is_host, username)
         self._send_queue = asyncio.Queue()
         self._msg_queue = asyncio.Queue()
         self._load_permissions()
-       
 
     async def save_as_pdf(self):
-        if not self.file_path:
-            return 
-        self._converter.to_pdf(file_path)
+        if not self._file_path:
+            return
+        self._converter.to_pdf(self._file_path)
 
     async def save_as_html(self):
-        if not self.file_path:
-            return 
-        self._converter.to_html(file_path)
-
+        if not self._file_path:
+            return
+        self._converter.to_html(self._file_path)
 
     async def save_as_doc(self):
-        if not self.file_path:
-            return 
-        self._converter.to_doc(file_path)
-
+        if not self._file_path:
+            return
+        self._converter.to_doc(self._file_path)
 
     def _load_permissions(self):
         if not self._is_host:
