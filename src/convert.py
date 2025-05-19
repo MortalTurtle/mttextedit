@@ -2,7 +2,7 @@ class TextExporter:
     def __init__(self, lines):
         self.lines = lines
 
-    def to_pdf(self, filename):
+    def to_pdf(self, file_path):
         content_lines = []
 
         y_position = 700
@@ -58,10 +58,10 @@ class TextExporter:
 
         full_pdf = body + xref_and_trailer
 
-        with open(filename, 'wb') as f:
+        with open(file_path+'.pdf', 'wb') as f:
             f.write('\n'.join(full_pdf).encode('utf-8'))
 
-    def to_html(self, filename):
+    def to_html(self, file_path):
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -75,10 +75,10 @@ class TextExporter:
         </html>
         """
 
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(file_path+".html", 'w', encoding='utf-8') as f:
             f.write(html_content)
 
-    def to_doc(self, filename):
+    def to_doc(self, file_path):
         header = r"{\rtf1\ansi\deff0"
         body = ""
 
@@ -89,6 +89,6 @@ class TextExporter:
         rtf_footer = "}"
         content = header + "\n" + body + rtf_footer
 
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(file_path+".doc", 'w', encoding='utf-8') as f:
             f.write(content)
 
