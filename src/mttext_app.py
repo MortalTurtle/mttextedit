@@ -1,5 +1,6 @@
 import asyncio
 import curses
+from history_handler import HistoryHandler
 from message_parser import MessageParser
 from model import Model
 
@@ -84,7 +85,12 @@ class MtTextEditApp():
     def connect(self, conn_ip):
         curses.wrapper(self._main, True, conn_ip)
 
+    def show_changes(self, filename, changes_file):
+        self._can_write = False
+        curses.wrapper(self._show_changes_main, filename, changes_file)
+
     async def stop(self):
+        await self._model.save_changes_history()
         await self.send(f"{self._username} " + ("-DCH" if self._is_host else "-DC"))
         await asyncio.sleep(0.1)
         if self._writer:
@@ -224,10 +230,24 @@ class MtTextEditApp():
         await self.send(f"{self._username} -U {' '.join([f"{x[0]} {x[1]}" for x in zip(self._model.users, user_pos_strings)])}")
         await self.send(f"{self._username} -T {'\n'.join(self._model.text_lines)}")
         if can_write:
+            await self._model.add_user(args[0])
             await self._consumer_handler(reader)
 
     def _main(self, *args, **kwargs):
         asyncio.run(self._async_main(*args, **kwargs))
+
+    def _show_changes_main(self, *args, **kwargs):
+        asyncio.run(self._show_changes_async_main(*args, **kwargs))
+
+    async def _show_changes_async_main(self, stdscr, filename, changes_file):
+        self.stdscr = stdscr
+        self._stop = False
+        history_handler = HistoryHandler()
+        await asyncio.gather(
+            history_handler.show_changes(
+                filename, changes_file, self._model, stdscr),
+            self._input_handler()
+        )
 
     async def _async_main(self, stdscr, should_connect=False, conn_ip=''):
         self.stdscr = stdscr

@@ -1,6 +1,7 @@
 from asyncio import Lock
 from functools import wraps
 import time
+from history_handler import HistoryHandler
 from view import View
 
 
@@ -29,21 +30,17 @@ class Model:
         self._action_stack_by_user[owner_username] = []
         self._reverted_action_stack_by_user[owner_username] = []
         self.text_lines = text.splitlines()
+        self._history_handler = HistoryHandler(file_path)
         if text == "":
             self.text_lines = [""]
-
 
     async def get_user_pos(self, username):
         async with self._users_pos_m:
             return self.user_positions[username]
 
     async def save_file(self):
-        if self._file_path == None:
-            return
         async with self._text_m:
-            with open(self._file_path, "w") as f:
-                text = "\n".join(self.text_lines)
-                f.write(text)
+            await self._history_handler.save_file(self.text_lines)
 
     async def user_disconnected(self, username):
         async with self._users_m, self._users_pos_m:
@@ -247,7 +244,7 @@ class Model:
             self._action_stack_by_user[username].append(
                 [undo_func, undo_kwargs, redo_func, redo_kwargs])
 
-    async def _undo_selected_cut(self, username, user_pos, shifted_pos, text_cut, insert_list=None):
+    async def _undo_selected_cut(self, username, user_pos, shifted_pos, text_cut):
         if not shifted_pos:
             return
         top = user_pos
@@ -399,6 +396,7 @@ class Model:
                 undo_kwargs = {'username': username,
                                'user_pos': user_pos,
                                'self': self}
+                undo_kwargs['op_cnt'] = self._history_handler._op_cnt + 1
                 if not shifted_pos:
                     await self._correct_frames_and_posision(
                         username, pos_correction_func,
@@ -412,6 +410,7 @@ class Model:
                 top, bot = await self._get_correct_top_bot_orientation(user_pos, shifted_pos)
                 undo_kwargs['shifted_pos'] = shifted_pos
                 undo_kwargs['text_cut'] = await self._get_range(top, bot)
+                await self._history_handler.user_cut_save_history(username, self.text_lines, top, bot)
                 await self._append_to_action_stack(username, undo_func,
                                                    undo_kwargs, getattr(
                                                        Model, redo_func_name),
@@ -442,13 +441,16 @@ class Model:
         top, bot = await self._get_user_top_bot_selected(self._owner_username)
         self._buffer = await self._get_range(top, bot)
 
-    async def _undo_paste(self, username, user_pos, new_pos, shifted_pos=None, text_cut=None):
+    async def _undo_paste(self, username, user_pos, new_pos, op_cnt=-1, shifted_pos=None, text_cut=None):
         top = user_pos
         if shifted_pos:
             if shifted_pos[1] < user_pos[1] or \
                     shifted_pos[1] == user_pos[1] and shifted_pos[0] < user_pos[0]:
                 top = shifted_pos
         await self._cut_selected_text(top, new_pos)
+        await self._history_handler.correct_history_on_undo_paste(username, op_cnt + 1 if shifted_pos else op_cnt)
+        if shifted_pos:
+            await self._history_handler.correct_history_on_undo_cut(username, op_cnt)
         await self._correct_all_frames_and_pos_on_cut(username, top, new_pos)
         await self._undo_selected_cut(username, user_pos, shifted_pos, text_cut)
         await self._set_user_pos(username, user_pos, shifted_pos)
@@ -463,6 +465,7 @@ class Model:
     @_handle_edit_decorator(_undo_paste, '_make_paste', _make_pos_correct_after_paste)
     async def _make_paste(self, username, user_pos, shifted_pos, text_to_paste):
         new_pos = await self._insert(text_to_paste, self.user_positions[username])
+        await self._history_handler.new_text_save_history(username, user_pos, new_pos)
         async with self._action_stack_m:
             self._action_stack_by_user[username][-1][1]['new_pos'] = new_pos
         async with self._users_pos_m:
@@ -488,14 +491,16 @@ class Model:
             await self.copy_to_buffer()
         await self.user_deleted_char(username)
 
-    async def _undo_user_wrote_char(self, username, user_pos, shifted_pos=None, text_cut=None):
+    async def _undo_user_wrote_char(self, username, user_pos, op_cnt, shifted_pos=None, text_cut=None):
         top = user_pos
         bot = await self._shift_pos_right(user_pos)
         await self._cut_selected_text(top, bot)
         await self._correct_all_frames_and_pos_on_cut(username, top, bot)
+        await self._history_handler.correct_history_on_undo_paste(username, op_cnt + 1 if shifted_pos else op_cnt)
         if shifted_pos:
             top, bot = await self._get_correct_top_bot_orientation(user_pos, shifted_pos)
             await self._correct_all_frames_and_pos_on_insert(username, top, bot)
+            await self._history_handler.correct_history_on_undo_cut(username, op_cnt)
         await self._undo_selected_cut(username, user_pos, shifted_pos, text_cut)
         await self._set_user_pos(username, user_pos, shifted_pos)
 
@@ -511,6 +516,8 @@ class Model:
                             _make_pos_correct_after_write)
     async def _make_write_char(self, username, user_pos, shifted_pos, char):
         user_x, user_y = user_pos
+        await self._history_handler.new_text_save_history(
+            username, user_pos, await self._shift_pos_right(user_pos))
         async with self._text_m:
             if user_y == len(self.text_lines):
                 self.text_lines.append(char)
@@ -593,22 +600,27 @@ class Model:
     async def user_shifted_down(self, username):
         await self.user_pos_shifted_down(username, True)
 
-    async def _undo_delete_char(self, username, text_cut, user_pos, shifted_pos=None, line_cut_pos=None):
+    async def _undo_delete_char(self, username, text_cut, user_pos, op_cnt, shifted_pos=None, line_cut_pos=None):
         await self._undo_selected_cut(username, user_pos, shifted_pos, text_cut)
         if shifted_pos:
             top, bot = await self._get_correct_top_bot_orientation(user_pos, shifted_pos)
             await self._correct_all_frames_and_pos_on_insert(username, top, bot)
-        if not shifted_pos:
+        else:
             if text_cut == '\n':
+                top = line_cut_pos
+                bot = await self._get_bot_pos_on_insert(line_cut_pos, '\n')
                 await self._insert(text_cut, line_cut_pos)
                 await self._correct_all_frames_and_pos_on_insert(
-                    username, line_cut_pos,
-                    await self._get_bot_pos_on_insert(line_cut_pos, '\n'))
+                    username, top,
+                    bot)
             else:
-                await self._insert(text_cut, await self._shift_pos_left(user_pos))
+                top = await self._shift_pos_left(user_pos)
+                bot = user_pos
+                await self._insert(text_cut, top)
                 await self._correct_all_frames_and_pos_on_insert(
                     username,
-                    await self._shift_pos_left(user_pos), user_pos)
+                    top, bot)
+        await self._history_handler.correct_history_on_undo_cut(username, op_cnt)
         await self._set_user_pos(username, user_pos, shifted_pos)
 
     async def _make_pos_correct_after_del(self, action_pos, user_pos, shifted_pos, args):
@@ -642,6 +654,8 @@ class Model:
             await self._shift_pos_left(user_pos), user_pos)
         if self._action_stack_by_user[username][-1][1]['text_cut'] == '\n':
             self._action_stack_by_user[username][-1][1]['line_cut_pos'] = await self._shift_pos_left(user_pos)
+        await self._history_handler.user_cut_save_history(
+            username, self.text_lines, await self._shift_pos_left(user_pos), user_pos)
         user_x, user_y = user_pos
         if user_x == 0:
             if user_y == 0:
@@ -668,14 +682,16 @@ class Model:
             self.shift_user_positions[username] if username in self.shift_user_positions
             else None)
 
-    async def _undo_new_line(self, username, user_pos, shifted_pos=None, text_cut=None):
+    async def _undo_new_line(self, username, user_pos, op_cnt, shifted_pos=None, text_cut=None):
         top = user_pos
         bot = (0, user_pos[1] + 1)
         await self._cut_selected_text(top, bot)
+        await self._history_handler.correct_history_on_undo_cut(username, op_cnt + 1 if shifted_pos else op_cnt)
         await self._correct_all_frames_and_pos_on_cut(username, top, bot)
         if shifted_pos:
             top, bot = await self._get_correct_top_bot_orientation(user_pos, shifted_pos)
             await self._correct_all_frames_and_pos_on_insert(username, top, bot)
+            await self._history_handler.correct_history_on_undo_cut(username, op_cnt)
         await self._undo_selected_cut(username, user_pos, shifted_pos, text_cut)
         await self._set_user_pos(username, user_pos, shifted_pos)
 
@@ -711,12 +727,14 @@ class Model:
                             _make_pos_correct_after_new_line)
     async def _make_new_line(self, username, user_pos, shifted_pos):
         user_x, user_y = user_pos
+        bot = (0, user_y + 1)
+        await self._history_handler.new_text_save_history(username, user_pos, bot)
         async with self._text_m:
             self.text_lines.insert(user_y, "")
             self.text_lines[user_y] = self.text_lines[user_y + 1][:user_x]
             self.text_lines[user_y + 1] = self.text_lines[user_y + 1][user_x:]
         async with self._users_pos_m:
-            self.user_positions[username] = (0, user_y + 1)
+            self.user_positions[username] = bot
 
     @_after_edit_corrector_decor
     async def user_added_new_line(self, username):
@@ -744,3 +762,8 @@ class Model:
             redo_func, redo_args = \
                 self._reverted_action_stack_by_user[username].pop()
         await redo_func(*redo_args)
+
+    async def save_changes_history(self):
+        if not self._file_path:
+            return
+        await self._history_handler.session_ended()

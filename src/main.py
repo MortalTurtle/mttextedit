@@ -1,3 +1,4 @@
+import collections
 import re
 from mttext_app import MtTextEditApp
 import sys
@@ -5,6 +6,37 @@ import argparse
 import os
 
 PERMISSION_FILE = '/tmp/lib/mttext/permissions'
+HISTORY_FILE_PATH = "/tmp/lib/mttext/history/"
+
+# TODO: implement correct division for files with same filename
+
+
+def list_all_saved_history(file_path):
+    file_name = file_path[file_path.rfind('/'):]
+    os.makedirs(os.path.dirname(HISTORY_FILE_PATH +
+                file_name + '/'), exist_ok=True)
+    files = os.listdir(HISTORY_FILE_PATH + file_name + '/')
+    files.sort()
+    i = 1
+    for hist_file in filter(lambda x: '.o.cache' not in x, files):
+        print(hist_file[:hist_file.rfind('.')] + f'\t{i}')
+        i += 1
+
+
+def show_changes(file_path, changes_index):
+    file_name = file_path[file_path.rfind('/'):]
+    file_list = os.listdir(
+        HISTORY_FILE_PATH + file_name + '/')
+    file_list.sort()
+    files = list(filter(lambda x: '.o.cache' in x, file_list))
+    try:
+        with open(HISTORY_FILE_PATH + file_name + '/' + files[int(changes_index) - 1], 'r') as f:
+            filetext = f.read()
+    except:
+        print('no such changes file found, :(')
+        return
+    app = MtTextEditApp("view_changes", filetext)
+    app.show_changes(file_name, files[int(changes_index) - 1])
 
 
 def get_permissions():
@@ -77,7 +109,7 @@ def main():
         description="multi-user text editor",
         epilog=":)",
         usage="%(prog)s [-D] (-H FILE_PATH USERNAME | -C CONN_IP USERNAME | \
-        -P USERNAME ACCESS_RIGHTS | -Pl)"
+        -P USERNAME ACCESS_RIGHTS | -Pl | -CHH FILE_PATH | -CH FILE_PATH INDEX)"
     )
     parser.add_argument('-D', action='store_true', default=False,
                         dest='debug',
@@ -93,6 +125,12 @@ def main():
                         help='Manage user permissions + to add, - to remove (rw - read/write, r - read only)')
     parser.add_argument('-Pl', action='store_true', default=False,
                         help="List all permissions")
+    parser.add_argument('-CHH', nargs=1,
+                        metavar=('FILE_PATH'),
+                        help='List all availible history changes for file')
+    parser.add_argument('-CH', nargs=2,
+                        metavar=('FILE_PATH', 'INDEX'),
+                        help='Show history for file from i-th session')
     try:
         args = parser.parse_args()
         if args.Pl:
@@ -103,6 +141,10 @@ def main():
             connect_to_session(args.debug, args.C[0], args.C[1])
         if args.H:
             host_session(args.debug, args.H[0], args.H[1])
+        if args.CHH:
+            list_all_saved_history(args.CHH[0])
+        if args.CH:
+            show_changes(args.CH[0], args.CH[1])
     except:
         parser.print_help()
 

@@ -38,3 +38,4 @@ multi-user text editor
     [sender_username] -REDO / user reverted reversion of last action
 
     [sender_username] -WNACK / writing forbidden
+
