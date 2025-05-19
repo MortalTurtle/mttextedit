@@ -270,7 +270,7 @@ class HistoryHandler:
             for frame in self._changes_frames:
                 frame_str = f"{frame[0]} {frame[1][0]} {frame[1][1]} {frame[2][0]} {frame[2][1]} {frame[3].replace(' ', '/s') if frame[0] == 'cut' else frame[3]} {frame[4] if frame[0] == 'cut' else ""}{self._DELIMITER}"
                 f.write(frame_str)
-        with open(self._HISTORY_DIR_PATH + str(self._session_start) + 'blame.cache', 'w') as f:
+        with open(self._HISTORY_DIR_PATH + str(self._session_start) + '.blame.cache', 'w') as f:
             for line in self._last_edited_by:
                 f.write(line + '\n')
         os.remove(self._CHANGES_CACHE_PATH)

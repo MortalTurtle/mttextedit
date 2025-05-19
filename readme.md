@@ -8,6 +8,22 @@ multi-user text editor
 #connect to session:
 
 `-C [conn_ip] [username]`
+
+#manage user rights
+
+`-P [username] [acces_rights](+/-(rw|r))`
+
+#list all user rights
+
+`-Pl`
+
+#list all availible sessions to show history
+
+`-CHH [file_path]`
+
+#show changes from i-th session from list
+
+`-CH [file_path] [index]`
  
 #for debug add -D as first arg
 

@@ -18,8 +18,8 @@ def list_all_saved_history(file_path):
     files = os.listdir(HISTORY_FILE_PATH + file_name + '/')
     files.sort()
     i = 1
-    for hist_file in filter(lambda x: '.o.cache' not in x, files):
-        print(hist_file[:hist_file.rfind('.')] + f'\t{i}')
+    for hist_file in filter(lambda x: '.o.cache' in x, files):
+        print(hist_file[:hist_file.rfind('.o.cache')] + f'\t{i}')
         i += 1
 
 
