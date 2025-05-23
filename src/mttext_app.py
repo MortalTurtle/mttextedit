@@ -247,7 +247,8 @@ class MtTextEditApp():
             if self._is_host:
                 self._writers.remove(self._reader_to_writer[reader])
             return
-        await self.send(f"{self._username} -U {' '.join([f"{x[0]} {x[1]}" for x in zip(self._model.users, user_pos_strings)])}")
+        await self.send(f"{self._username} -U \
+                        {' '.join([f"{x[0]} {x[1]}" for x in zip(self._model.users, user_pos_strings)])}")
         await self.send(f"{self._username} -T {'\n'.join(self._model.text_lines)}")
         if can_write:
             await self._model.add_user(args[0])
