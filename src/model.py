@@ -33,6 +33,8 @@ class Model:
         self._history_handler = HistoryHandler(file_path)
         if text == "":
             self.text_lines = [""]
+        if file_path:
+            self._history_handler.load_blame(self.text_lines, owner_username)
 
     async def get_user_pos(self, username):
         async with self._users_pos_m:

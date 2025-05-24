@@ -39,6 +39,22 @@ def show_changes(file_path, changes_index):
     app.show_changes(file_name, files[int(changes_index) - 1])
 
 
+def show_blame(file_path, changes_index):
+    file_name = file_path[file_path.rfind('/'):]
+    file_list = os.listdir(
+        HISTORY_FILE_PATH + file_name + '/')
+    file_list.sort()
+    files = list(filter(lambda x: '.o.cache' in x, file_list))
+    try:
+        with open(HISTORY_FILE_PATH + file_name + '/' + files[int(changes_index) - 1], 'r') as f:
+            filetext = f.read()
+    except:
+        print('no such changes file found, :(')
+        return
+    app = MtTextEditApp("view_blame", filetext)
+    app.show_blame(file_name, files[int(changes_index) - 1])
+
+
 def get_permissions():
     permissions = {}
     try:
@@ -109,7 +125,8 @@ def main():
         description="multi-user text editor",
         epilog=":)",
         usage="%(prog)s [-D] (-H FILE_PATH USERNAME | -C CONN_IP USERNAME | \
-        -P USERNAME ACCESS_RIGHTS | -Pl | -CHH FILE_PATH | -CH FILE_PATH INDEX)"
+        -P USERNAME ACCESS_RIGHTS | -Pl | -CHH FILE_PATH | -CH FILE_PATH INDEX \
+        -B FILE_PATH INDEX)"
     )
     parser.add_argument('-D', action='store_true', default=False,
                         dest='debug',
@@ -131,6 +148,9 @@ def main():
     parser.add_argument('-CH', nargs=2,
                         metavar=('FILE_PATH', 'INDEX'),
                         help='Show history for file from i-th session')
+    parser.add_argument('-B', nargs=2,
+                        metavar=('FILE_PATH', 'INDEX'),
+                        help='Show blame for file from i-th session')
     try:
         args = parser.parse_args()
         if args.Pl:
@@ -145,6 +165,8 @@ def main():
             list_all_saved_history(args.CHH[0])
         if args.CH:
             show_changes(args.CH[0], args.CH[1])
+        if args.B:
+            show_blame(args.B[0], args.B[1])
     except:
         parser.print_help()
 
