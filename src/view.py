@@ -25,7 +25,8 @@ class View:
         curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_RED)
         self.stdscr.bkgd(" ", curses.color_pair(1))
 
-    def _correct_offset_by_owner_pos(self, owner_x, owner_y, max_uername_len=None):
+    def _correct_offset_by_owner_pos(
+            self, owner_x, owner_y, max_uername_len=None):
         height, width = self.stdscr.getmaxyx()
         if max_uername_len:
             width -= max_uername_len
@@ -119,11 +120,11 @@ class View:
         self._paint_range(text_lines, color, top, bot)
 
     def _draw_user_positions(
-      self,
-      text_lines,
-      user_positions,
-      users_shift_pos,
-      max_username_len=None):
+            self,
+            text_lines,
+            user_positions,
+            users_shift_pos,
+            max_username_len=None):
         height, width = self.stdscr.getmaxyx()
         if max_username_len:
             width -= (max_username_len + 1)
@@ -202,7 +203,14 @@ class View:
             self._draw_changes(text_lines, changes_frames)
         self.stdscr.refresh()
 
-    def draw_blame(self, text_lines, user_positions, users, users_shift_pos, blame, max_username_len):
+    def draw_blame(
+            self,
+            text_lines,
+            user_positions,
+            users,
+            users_shift_pos,
+            blame,
+            max_username_len):
         height, width = self.stdscr.getmaxyx()
         width -= (max_username_len + 1)
         owner_x, owner_y = user_positions[self._owner_username] if \
@@ -212,7 +220,8 @@ class View:
         for y in range(1, height-2):
             line_num = y - 1 + self._offset_y
             if line_num < len(text_lines):
-                line = text_lines[line_num][self._offset_x: self._offset_x + width-1]
+                line = text_lines[line_num][self._offset_x:
+                                            self._offset_x + width-1]
                 self.stdscr.addstr(y, max_username_len + 1,
                                    line + " " * (width - len(line)))
             else:

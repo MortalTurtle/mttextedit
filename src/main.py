@@ -50,9 +50,12 @@ def show_blame(file_path, changes_index):
     file_list.sort()
     files = list(filter(lambda x: '.o.cache' in x, file_list))
     try:
-        with open(HISTORY_FILE_PATH + file_name + '/' + files[int(changes_index) - 1], 'r') as f:
+        with open(
+                HISTORY_FILE_PATH +
+                file_name + '/' +
+                files[int(changes_index) - 1], 'r') as f:
             filetext = f.read()
-    except:
+    except Exception:
         print('no such changes file found, :(')
         return
     app = MtTextEditApp("view_blame", filetext)
@@ -133,7 +136,8 @@ def main():
         description="multi-user text editor",
         epilog=":)",
         usage="%(prog)s [-D] (-H FILE_PATH USERNAME | -C CONN_IP USERNAME | \
-        -P USERNAME ACCESS_RIGHTS | -Pl | -CHH FILE_PATH | -CH FILE_PATH INDEX \
+        -P USERNAME ACCESS_RIGHTS | -Pl | \
+        -CHH FILE_PATH | -CH FILE_PATH INDEX \
         -B FILE_PATH INDEX)"
     )
     parser.add_argument('-D', action='store_true', default=False,
@@ -147,7 +151,8 @@ def main():
                         help='Connect to session')
     parser.add_argument('-P', nargs=2,
                         metavar=('USERNAME', 'ACCESS_RIGHTS'),
-                        help='Manage user permissions + to add, - to remove (rw - read/write, r - read only)')
+                        help='Manage user permissions + to add, \
+                        - to remove (rw - read/write, r - read only)')
     parser.add_argument('-Pl', action='store_true', default=False,
                         help="List all permissions")
     parser.add_argument('-CHH', nargs=1,

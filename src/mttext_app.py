@@ -125,7 +125,7 @@ class MtTextEditApp():
             await self._model.save_changes_history()
         else:
             self.history_handler.stop_view()
-        await self.send(f"{self._username} " 
+        await self.send(f"{self._username} "
                         + ("-DCH" if self._is_host else "-DC"))
         await asyncio.sleep(0.1)
         if self._writer:
@@ -269,10 +269,10 @@ class MtTextEditApp():
             f"{self._username} -U " +
             " ".join(f"{u} {p}" for u, p in zip(self._model.users,
                                                 user_pos_strings))
-            )
+        )
         await self.send(
             f"{self._username} -T {'\n'.join(self._model.text_lines)}"
-            )
+        )
         if can_write:
             await self._model.add_user(args[0])
             await self._consumer_handler(reader)
@@ -312,9 +312,9 @@ class MtTextEditApp():
         if not self.debug:
             asyncio.get_event_loop().run_in_executor(
                 None, self._model.run_view, stdscr
-                )
+            )
         if not should_connect:
-            server = await asyncio.start_server(
+            await asyncio.start_server(
                 self._connection_handler, '127.0.0.1', 12000)
             await asyncio.gather(
                 self._input_handler(),

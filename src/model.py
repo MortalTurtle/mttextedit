@@ -649,7 +649,7 @@ class Model:
         await self._cut_selected_text(top, bot)
         await self._correct_all_frames_and_pos_on_cut(username, top, bot)
         await self._history_handler.correct_history_on_undo_paste(
-            username, op_cnt + 1 if shifted_pos else op_cnt
+            username, op_cnt
         )
         if shifted_pos:
             top, bot = await self._get_correct_top_bot_orientation(
@@ -657,9 +657,6 @@ class Model:
             )
             await self._correct_all_frames_and_pos_on_insert(
                 username, top, bot
-            )
-            await self._history_handler.correct_history_on_undo_cut(
-                username, op_cnt
             )
         await self._undo_selected_cut(
             username, user_pos, shifted_pos, text_cut

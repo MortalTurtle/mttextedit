@@ -10,6 +10,7 @@ class HistoryHandler:
     _CACHE_PATH = "/tmp/lib/mttext/cache/"
     _BASE_CACHE_PATH = _CACHE_PATH + 'base.cache'
     _CHANGES_CACHE_PATH = _CACHE_PATH + 'changes.cache'
+    _changes_frames_by_op: dict = {}
     _changes_frames = []
     _last_edited_by = []
     _DELIMITER = b' \n\x1E'
@@ -30,7 +31,9 @@ class HistoryHandler:
     def stop_view(self):
         self.stop = True
 
-    def load_blame(self, text_lines, owner_username, history_file: str = None, filename=None):
+    def load_blame(self,
+                   text_lines,
+                   owner_username, history_file: str = None, filename=None):
         try:
             if history_file:
                 file_path = self._HISTORY_DIR_PATH + filename + '/' + \
@@ -186,7 +189,7 @@ class HistoryHandler:
         if not self._file_path:
             return
         self._op_cnt += 1
-        self._changes_frames.append(
+        self._changes_frames_by_op[self._op_cnt - 1] = (
             ['cut',
              top,
              bot,
@@ -196,13 +199,13 @@ class HistoryHandler:
     async def correct_history_on_undo_cut(self, username, op_cnt):
         if not self._file_path:
             return
-        self._changes_frames.pop(op_cnt - 1)
+        self._changes_frames_by_op.pop(op_cnt - 1)
 
     async def new_text_save_history(self, username, top, bot):
         if not self._file_path:
             return
         self._op_cnt += 1
-        self._changes_frames.append(
+        self._changes_frames_by_op[self._op_cnt - 1] = (
             ['insert', top, bot, username]
         )
         return self._op_cnt
@@ -210,7 +213,7 @@ class HistoryHandler:
     async def correct_history_on_undo_paste(self, username, op_cnt):
         if not self._file_path:
             return
-        self._changes_frames.pop(op_cnt - 1)
+        self._changes_frames_by_op.pop(op_cnt - 1)
 
     def _save_base_version(self):
         with open(self._file_path, 'r') as f:
@@ -220,6 +223,9 @@ class HistoryHandler:
 
     async def _save_changes(self, text_lines):
         with open(self._CHANGES_CACHE_PATH, 'w') as f:
+            for i in range(0, self._op_cnt):
+                if i in self._changes_frames_by_op:
+                    self._changes_frames.append(self._changes_frames_by_op[i])
             for frame in self._changes_frames:
                 frame_data = [
                     str(frame[0]),
@@ -350,7 +356,8 @@ class HistoryHandler:
                 self._last_edited_by[top[1]] = username
                 for y in range(top[1], bot[1]):
                     self._last_edited_by.insert(y, username)
-        with open(self._HISTORY_DIR_PATH + str(self._session_start) + '.cache', 'w') as f:
+        with open(self._HISTORY_DIR_PATH +
+                  str(self._session_start) + '.cache', 'w') as f:
             for frame in self._changes_frames:
                 frame_data = [
                     str(frame[0]),
