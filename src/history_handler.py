@@ -7,7 +7,6 @@ from view import View
 
 class HistoryHandler:
     _HISTORY_DIR_PATH = "/tmp/lib/mttext/history/"
-    _BLAME_DIR_PATH = "/tmp/lib/mttext/blame/"
     _CACHE_PATH = "/tmp/lib/mttext/cache/"
     _BASE_CACHE_PATH = _CACHE_PATH + 'base.cache'
     _CHANGES_CACHE_PATH = _CACHE_PATH + 'changes.cache'
@@ -19,6 +18,7 @@ class HistoryHandler:
 
     def __init__(self, file_path=None):
         self._session_start = datetime.datetime.now()
+        self.stop = False
         if not file_path:
             return
         self._file_path = file_path
@@ -26,13 +26,31 @@ class HistoryHandler:
         self._HISTORY_DIR_PATH += self._file_name + '/'
         os.makedirs(os.path.dirname(self._HISTORY_DIR_PATH), exist_ok=True)
         os.makedirs(os.path.dirname(self._CACHE_PATH), exist_ok=True)
-        os.makedirs(os.path.dirname(self._BLAME_DIR_PATH), exist_ok=True)
 
-    def load_blame(self, text_lines, owner_username):
+    def stop_view(self):
+        self.stop = True
+
+    def load_blame(self, text_lines, owner_username, history_file: str = None, filename=None):
         try:
-            with open(self._BLAME_DIR_PATH + self._file_name, 'r') as f:
+            if history_file:
+                file_path = self._HISTORY_DIR_PATH + filename + '/' + \
+                    history_file.replace(".o.cache", ".blame.cache")
+            else:
+                files = filter(lambda x: '.blame.cache' in x, os.listdir(
+                    self._HISTORY_DIR_PATH + self._file_name + '/'))
+                most_recent = None
+                for file in files:
+                    date = datetime.datetime.strptime(
+                        file[file.rfind('/'):].replace('.blame.cache', ""))
+                    if not most_recent:
+                        most_recent = date
+                    if date > most_recent:
+                        most_recent = date
+                file_path = self._HISTORY_DIR_PATH + self._file_name + \
+                    '/' + str(most_recent) + '.blame.cache'
+            with open(file_path, 'r') as f:
                 for line in f.readlines():
-                    self._last_edited_by.append(line)
+                    self._last_edited_by.append(line.replace('\n', ""))
         except OSError:
             for line in text_lines:
                 self._last_edited_by.append(owner_username)
@@ -262,9 +280,25 @@ class HistoryHandler:
                 continue
         await self._show_changes_view(stdscr, model)
 
+    async def show_blame(self, filename, history_file: str, model, stdscr):
+        self.load_blame(model.text_lines, None, history_file, filename)
+        view = View(stdscr, 'view_blame')
+        max_len = 0
+        for username in self._last_edited_by:
+            max_len = max(len(username), max_len)
+        while not self.stop:
+            view.draw_blame(
+                model.text_lines,
+                model.user_positions,
+                model.users,
+                model.shift_user_positions,
+                self._last_edited_by,
+                max_len)
+            await asyncio.sleep(0.05)
+
     async def _show_changes_view(self, stdscr, model):
         view = View(stdscr, 'view_changes')
-        while True:
+        while not self.stop:
             view.draw_text(
                 model.text_lines,
                 model.user_positions,
@@ -306,21 +340,17 @@ class HistoryHandler:
             op_type, top, bot, *rest = frame
             if op_type == 'cut':
                 cut_text = rest[0]
-                # username = rest[1]
-                # self._last_edited_by[top[1]] = username
-                # self._last_edited_by[bot[1]] = username
+                username = rest[1]
+                self._last_edited_by[top[1]] = username
+                self._last_edited_by[bot[1]] = username
                 for y in range(top[1] + 1, bot[1]):
-                    # self._last_edited_by.pop(y)
-                    pass
+                    self._last_edited_by.pop(y)
             if op_type == 'insert':
-                # username = rest[0]
-                for y in range(top[1], bot[1] + 1):
-                    pass
-                    # self._last_edited_by.insert(y, username)
-        with open(self._HISTORY_DIR_PATH
-                  + str(self._session_start)
-                  + '.cache',
-                  'w') as f:
+                username = rest[0]
+                self._last_edited_by[top[1]] = username
+                for y in range(top[1], bot[1]):
+                    self._last_edited_by.insert(y, username)
+        with open(self._HISTORY_DIR_PATH + str(self._session_start) + '.cache', 'w') as f:
             for frame in self._changes_frames:
                 frame_data = [
                     str(frame[0]),

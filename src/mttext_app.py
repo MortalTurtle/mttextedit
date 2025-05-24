@@ -24,6 +24,7 @@ class MtTextEditApp():
     ):
         self.debug = debug
         self._model = Model(filetext, username, file_path)
+        self.history_handler = None
         self._file_path = file_path
         self._is_host = file_path is not None
         self._can_write = True
@@ -115,9 +116,16 @@ class MtTextEditApp():
         self._can_write = False
         curses.wrapper(self._show_changes_main, filename, changes_file)
 
+    def show_blame(self, filename, changes_file):
+        self._can_write = False
+        curses.wrapper(self._show_blame_main, filename, changes_file)
+
     async def stop(self):
-        await self._model.save_changes_history()
-        await self.send(f"{self._username} "
+        if not self.history_handler:
+            await self._model.save_changes_history()
+        else:
+            self.history_handler.stop_view()
+        await self.send(f"{self._username} " 
                         + ("-DCH" if self._is_host else "-DC"))
         await asyncio.sleep(0.1)
         if self._writer:
@@ -272,15 +280,28 @@ class MtTextEditApp():
     def _main(self, *args, **kwargs):
         asyncio.run(self._async_main(*args, **kwargs))
 
+    def _show_blame_main(self, *args, **kwargs):
+        asyncio.run(self._show_blame_async_main(*args, **kwargs))
+
+    async def _show_blame_async_main(self, stdscr, filename, changes_file):
+        self.stdscr = stdscr
+        self._stop = False
+        self.history_handler = HistoryHandler()
+        await asyncio.gather(
+            self.history_handler.show_blame(
+                filename, changes_file, self._model, stdscr),
+            self._input_handler()
+        )
+
     def _show_changes_main(self, *args, **kwargs):
         asyncio.run(self._show_changes_async_main(*args, **kwargs))
 
     async def _show_changes_async_main(self, stdscr, filename, changes_file):
         self.stdscr = stdscr
         self._stop = False
-        history_handler = HistoryHandler()
+        self.history_handler = HistoryHandler()
         await asyncio.gather(
-            history_handler.show_changes(
+            self.history_handler.show_changes(
                 filename, changes_file, self._model, stdscr),
             self._input_handler()
         )

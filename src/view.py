@@ -25,8 +25,10 @@ class View:
         curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_RED)
         self.stdscr.bkgd(" ", curses.color_pair(1))
 
-    def _correct_offset_by_owner_pos(self, owner_x, owner_y):
+    def _correct_offset_by_owner_pos(self, owner_x, owner_y, max_uername_len=None):
         height, width = self.stdscr.getmaxyx()
+        if max_uername_len:
+            width -= max_uername_len
         while owner_x - self._offset_x >= width - 1:
             self._offset_x += 1
         while owner_x - self._offset_x < 0:
@@ -117,9 +119,16 @@ class View:
         self._paint_range(text_lines, color, top, bot)
 
     def _draw_user_positions(
-        self, text_lines, user_positions, users_shift_pos
-    ):
+      self,
+      text_lines,
+      user_positions,
+      users_shift_pos,
+      max_username_len=None):
         height, width = self.stdscr.getmaxyx()
+        if max_username_len:
+            width -= (max_username_len + 1)
+        else:
+            max_username_len = -1
         for user in user_positions.keys():
             if user in users_shift_pos:
                 self._draw_user_shift_pos(
@@ -145,14 +154,12 @@ class View:
             ):
                 self.stdscr.addstr(
                     user_y + 1 - self._offset_y,
-                    user_x - self._offset_x,
-                    " ",
-                    curses.color_pair(self._user_color_index[user]),
-                )
+                    user_x - self._offset_x + max_username_len + 1, " ",
+                    curses.color_pair(self._user_color_index[user]))
             else:
                 self.stdscr.addstr(
                     user_y + 1 - self._offset_y,
-                    user_x - self._offset_x,
+                    user_x - self._offset_x + max_username_len + 1,
                     text_lines[user_y][user_x],
                     curses.color_pair(self._user_color_index[user]),
                 )
@@ -193,6 +200,32 @@ class View:
         self._draw_user_positions(text_lines, user_positions, users_shift_pos)
         if changes_frames:
             self._draw_changes(text_lines, changes_frames)
+        self.stdscr.refresh()
+
+    def draw_blame(self, text_lines, user_positions, users, users_shift_pos, blame, max_username_len):
+        height, width = self.stdscr.getmaxyx()
+        width -= (max_username_len + 1)
+        owner_x, owner_y = user_positions[self._owner_username] if \
+            self._owner_username not in users_shift_pos else \
+            users_shift_pos[self._owner_username]
+        self._correct_offset_by_owner_pos(owner_x, owner_y, max_username_len)
+        for y in range(1, height-2):
+            line_num = y - 1 + self._offset_y
+            if line_num < len(text_lines):
+                line = text_lines[line_num][self._offset_x: self._offset_x + width-1]
+                self.stdscr.addstr(y, max_username_len + 1,
+                                   line + " " * (width - len(line)))
+            else:
+                self.stdscr.addstr(y, max_username_len + 1, " "*(width-1))
+        self._draw_users_colors(users)
+        self._draw_user_positions(
+            text_lines, user_positions, users_shift_pos, max_username_len)
+        for y in range(1, height - 2):
+            if y + self._offset_y - 1 >= len(text_lines):
+                break
+            username = blame[y + self._offset_y - 1]
+            self.stdscr.addstr(y, 0, username + " " *
+                               (max_username_len - len(username)) + ":")
         self.stdscr.refresh()
 
     def _draw_interface(self):
