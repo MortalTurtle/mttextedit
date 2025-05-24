@@ -1,39 +1,43 @@
-import collections
 import re
 from mttext_app import MtTextEditApp
-import sys
 import argparse
 import os
 
-PERMISSION_FILE = '/tmp/lib/mttext/permissions'
+PERMISSION_FILE = "/tmp/lib/mttext/permissions"
 HISTORY_FILE_PATH = "/tmp/lib/mttext/history/"
 
 # TODO: implement correct division for files with same filename
 
 
 def list_all_saved_history(file_path):
-    file_name = file_path[file_path.rfind('/'):]
-    os.makedirs(os.path.dirname(HISTORY_FILE_PATH +
-                file_name + '/'), exist_ok=True)
-    files = os.listdir(HISTORY_FILE_PATH + file_name + '/')
+    file_name = file_path[file_path.rfind("/"):]
+    os.makedirs(
+        os.path.dirname(HISTORY_FILE_PATH + file_name + "/"), exist_ok=True
+    )
+    files = os.listdir(HISTORY_FILE_PATH + file_name + "/")
     files.sort()
     i = 1
-    for hist_file in filter(lambda x: '.o.cache' in x, files):
-        print(hist_file[:hist_file.rfind('.o.cache')] + f'\t{i}')
+    for hist_file in filter(lambda x: ".o.cache" in x, files):
+        print(hist_file[: hist_file.rfind(".o.cache")] + f"\t{i}")
         i += 1
 
 
 def show_changes(file_path, changes_index):
-    file_name = file_path[file_path.rfind('/'):]
-    file_list = os.listdir(
-        HISTORY_FILE_PATH + file_name + '/')
+    file_name = file_path[file_path.rfind("/"):]
+    file_list = os.listdir(HISTORY_FILE_PATH + file_name + "/")
     file_list.sort()
-    files = list(filter(lambda x: '.o.cache' in x, file_list))
+    files = list(filter(lambda x: ".o.cache" in x, file_list))
     try:
-        with open(HISTORY_FILE_PATH + file_name + '/' + files[int(changes_index) - 1], 'r') as f:
+        with open(
+            HISTORY_FILE_PATH
+            + file_name
+            + "/"
+            + files[int(changes_index) - 1],
+            "r",
+        ) as f:
             filetext = f.read()
-    except:
-        print('no such changes file found, :(')
+    except FileExistsError:
+        print("no such changes file found, :(")
         return
     app = MtTextEditApp("view_changes", filetext)
     app.show_changes(file_name, files[int(changes_index) - 1])
@@ -58,10 +62,10 @@ def show_blame(file_path, changes_index):
 def get_permissions():
     permissions = {}
     try:
-        with open(PERMISSION_FILE, 'r') as f:
+        with open(PERMISSION_FILE, "r") as f:
             for line in f:
-                if ':' in line:
-                    user, rights = line.strip().split(':')
+                if ":" in line:
+                    user, rights = line.strip().split(":")
                     permissions[user] = rights
     except FileNotFoundError:
         os.makedirs(os.path.dirname(PERMISSION_FILE), exist_ok=True)
@@ -77,17 +81,20 @@ def list_permissions():
 def manage_permissions(username, access_rights):
     sign = access_rights[0]
     access_rights = access_rights[1:]
-    if access_rights not in ['rw', 'r'] or (sign != '+' and sign != '-'):
+    if access_rights not in ["rw", "r"] or (sign != "+" and sign != "-"):
         return False
     try:
         permissions = get_permissions()
-        if sign == '+':
-            if access_rights == 'rw' or access_rights == 'r' and \
-                    permissions.get(username, '') != 'rw':
+        if sign == "+":
+            if (
+                access_rights == "rw"
+                or access_rights == "r"
+                and permissions.get(username, "") != "rw"
+            ):
                 permissions[username] = access_rights
         elif username in permissions:
             permissions.pop(username)
-        with open(PERMISSION_FILE, 'w') as f:
+        with open(PERMISSION_FILE, "w") as f:
             for user, rights in permissions.items():
                 f.write(f"{user}:{rights}\n")
         return True
@@ -107,19 +114,20 @@ def connect_to_session(debug, conn_ip, username):
 
 def host_session(debug, file_path, username):
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             filetext = f.read()
     except IOError:
         print("File does not exist :(")
         return
-    socket = MtTextEditApp(username, filetext,
-                           debug=debug, file_path=file_path)
+    socket = MtTextEditApp(
+        username, filetext, debug=debug, file_path=file_path
+    )
     socket.run()
 
 
 def main():
-    offset = 0
-    debug = False
+    # offset = 0
+    # debug = False
     parser = argparse.ArgumentParser(
         prog="mtrtext",
         description="multi-user text editor",
@@ -167,9 +175,10 @@ def main():
             show_changes(args.CH[0], args.CH[1])
         if args.B:
             show_blame(args.B[0], args.B[1])
-    except:
+    except Exception as e:
         parser.print_help()
+        print(f"Error: {str(e)}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

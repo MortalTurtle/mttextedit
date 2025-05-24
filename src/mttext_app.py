@@ -15,12 +15,18 @@ class MtTextEditApp():
     _DELIMITER = b' \n\x1E'
     _PERMISSION_FILE_PATH = "/tmp/lib/mttext/permissions"
 
-    def __init__(self, username: str, filetext: str = "", debug=False, file_path=None):
+    def __init__(
+        self,
+        username: str,
+        filetext: str = "",
+        debug: bool = False,
+        file_path: str = None
+    ):
         self.debug = debug
         self._model = Model(filetext, username, file_path)
         self.history_handler = None
         self._file_path = file_path
-        self._is_host = file_path != None
+        self._is_host = file_path is not None
         self._can_write = True
         self._converter = TextExporter(self._model.text_lines)
         self._non_edit_func_by_key = {
@@ -119,7 +125,8 @@ class MtTextEditApp():
             await self._model.save_changes_history()
         else:
             self.history_handler.stop_view()
-        await self.send(f"{self._username} " + ("-DCH" if self._is_host else "-DC"))
+        await self.send(f"{self._username} " 
+                        + ("-DCH" if self._is_host else "-DC"))
         await asyncio.sleep(0.1)
         if self._writer:
             self._writer.close()
@@ -136,7 +143,8 @@ class MtTextEditApp():
         if key in self._edit_func_by_user_key.keys() and self._can_write:
             await self._edit_func_by_user_key[key](self._username)
             await self.send(self._get_msg_by_key[key](self._username))
-        elif key in self._func_by_special_key and (self._can_write or key != 22):
+        elif (key in self._func_by_special_key
+              and (self._can_write or key != 22)):
             await self._func_by_special_key[key]()
             if key in self._get_msg_by_key:
                 await self.send(self._get_msg_by_key[key](self._username))
@@ -146,7 +154,8 @@ class MtTextEditApp():
                 await self._model.user_wrote_char(self._username, key_str)
                 await self.send(
                     f"{self._username} -E " +
-                    f"{'/s' if key_str == ' ' else key_str}")
+                    f"{'/s' if key_str == ' ' else key_str}"
+                )
 
     async def _input_handler(self):
         curses.raw()
@@ -169,7 +178,7 @@ class MtTextEditApp():
                 return
             try:
                 data = await reader.readuntil(self._DELIMITER)
-            except:
+            except (ConnectionError, asyncio.IncompleteReadError):
                 if self._is_host:
                     self._writers.remove(self._reader_to_writer[reader])
                 break
@@ -199,7 +208,7 @@ class MtTextEditApp():
             try:
                 writer.write(message.encode() + self._DELIMITER)
                 await writer.drain()
-            except:
+            except (ConnectionError, asyncio.IncompleteReadError):
                 break
 
     async def _server_producer_handler(self):
@@ -215,7 +224,7 @@ class MtTextEditApp():
                 try:
                     connection.write(message.encode() + self._DELIMITER)
                     await connection.drain()
-                except:
+                except (ConnectionError, asyncio.IncompleteReadError):
                     connection.close()
                     self._writers.remove(connection)
 
@@ -236,7 +245,7 @@ class MtTextEditApp():
                     writer.write(
                         f'{self._username} -DCH'.encode() + self._DELIMITER)
                     await writer.drain()
-                except:
+                except (ConnectionError, asyncio.IncompleteReadError):
                     writer.close()
                 return
             if "r" in permissions:
@@ -247,16 +256,23 @@ class MtTextEditApp():
                 else:
                     try:
                         writer.write(
-                            f'{self._username} -WNACK'.encode() + self._DELIMITER)
+                            f'{self._username} -WNACK'.encode()
+                            + self._DELIMITER)
                         await writer.drain()
-                    except:
+                    except (ConnectionError, asyncio.IncompleteReadError):
                         writer.close()
-        except:
+        except (ConnectionError, asyncio.IncompleteReadError):
             if self._is_host:
                 self._writers.remove(self._reader_to_writer[reader])
             return
-        await self.send(f"{self._username} -U {' '.join([f"{x[0]} {x[1]}" for x in zip(self._model.users, user_pos_strings)])}")
-        await self.send(f"{self._username} -T {'\n'.join(self._model.text_lines)}")
+        await self.send(
+            f"{self._username} -U " +
+            " ".join(f"{u} {p}" for u, p in zip(self._model.users,
+                                                user_pos_strings))
+            )
+        await self.send(
+            f"{self._username} -T {'\n'.join(self._model.text_lines)}"
+            )
         if can_write:
             await self._model.add_user(args[0])
             await self._consumer_handler(reader)
@@ -294,7 +310,9 @@ class MtTextEditApp():
         self.stdscr = stdscr
         self._stop = False
         if not self.debug:
-            asyncio.get_event_loop().run_in_executor(None, self._model.run_view, stdscr)
+            asyncio.get_event_loop().run_in_executor(
+                None, self._model.run_view, stdscr
+                )
         if not should_connect:
             server = await asyncio.start_server(
                 self._connection_handler, '127.0.0.1', 12000)
