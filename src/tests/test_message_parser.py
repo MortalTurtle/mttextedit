@@ -1,7 +1,7 @@
 # test_view_module.py
 import unittest
-from model import Model
-from message_parser import MessageParser
+from core.model import Model
+from core.message_parser import MessageParser
 import asyncio
 
 

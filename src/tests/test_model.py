@@ -1,7 +1,7 @@
 # test_view_module.py
 import unittest
 from unittest import mock
-from model import Model
+from core.model import Model
 
 
 class TestModel(unittest.IsolatedAsyncioTestCase):

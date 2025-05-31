@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch,  mock_open
 import os
 import shutil
-from history_handler import HistoryHandler
+from core.history_handler import HistoryHandler
 
 
 class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):

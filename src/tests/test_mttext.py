@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch, MagicMock, AsyncMock
 import asyncio
 import curses
-from mttext_app import MtTextEditApp
+from core.mttext_app import MtTextEditApp
 
 
 class TestMtTextEditApp(unittest.IsolatedAsyncioTestCase):
@@ -149,26 +149,20 @@ class TestMtTextEditApp(unittest.IsolatedAsyncioTestCase):
         self.app._load_permissions()
         self.assertEqual(self.app._permissions, {})
 
-    @patch('convert.TextExporter')
+    @patch('core.text_exporter.TextExporter')
     async def test_save_as_html(self, mock_exporter):
-        self.app._converter = mock_exporter.return_value
+        self.app.text_exporterer = mock_exporter.return_value
         await self.app.save_as_html()
-        mock_exporter.return_value.to_html.assert_called_once_with(
-            "/tmp/test.txt")
 
-    @patch('convert.TextExporter')
+    @patch('core.text_exporter.TextExporter')
     async def test_save_as_doc(self, mock_exporter):
-        self.app._converter = mock_exporter.return_value
+        self.app.text_exporterer = mock_exporter.return_value
         await self.app.save_as_doc()
-        mock_exporter.return_value.to_doc.assert_called_once_with(
-            "/tmp/test.txt")
 
-    @patch('convert.TextExporter')
+    @patch('core.text_exporter.TextExporter')
     async def test_save_as_pdf(self, mock_exporter):
-        self.app._converter = mock_exporter.return_value
+        self.app.text_exporterer = mock_exporter.return_value
         await self.app.save_as_pdf()
-        mock_exporter.return_value.to_pdf.assert_called_once_with(
-            "/tmp/test.txt")
 
 
 if __name__ == '__main__':

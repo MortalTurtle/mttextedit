@@ -1,6 +1,6 @@
 import unittest
 from unittest import mock
-from convert import TextExporter
+from core.text_exporter import TextExporter
 
 
 class TestVConverter(unittest.TestCase):

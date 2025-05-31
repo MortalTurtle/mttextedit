@@ -1,8 +1,8 @@
 from asyncio import Lock
 from functools import wraps
 import time
-from history_handler import HistoryHandler
-from view import View
+from core.history_handler import HistoryHandler
+from core.view import View
 
 
 class Model:

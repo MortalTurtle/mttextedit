@@ -1,7 +1,7 @@
 import unittest
 import curses
 from unittest.mock import MagicMock, patch
-from view import View
+from core.view import View
 
 
 class TestView(unittest.TestCase):
