@@ -10,14 +10,14 @@ class HistoryHandler:
     _CACHE_PATH = "/tmp/lib/mttext/cache/"
     _BASE_CACHE_PATH = _CACHE_PATH + 'base.cache'
     _CHANGES_CACHE_PATH = _CACHE_PATH + 'changes.cache'
-    _changes_frames_by_op: dict = {}
-    _changes_frames = []
-    _last_edited_by = []
     _DELIMITER = b' \n\x1E'
-    _op_cnt = 0
-    _file_path = None
 
     def __init__(self, file_path=None):
+        self._changes_frames_by_op: dict = {}
+        self._changes_frames = []
+        self._last_edited_by = []
+        self._op_cnt = 0
+        self._file_path = None
         self._session_start = datetime.datetime.now()
         self.stop = False
         if not file_path:
