@@ -6,22 +6,23 @@ from view import View
 
 
 class Model:
-    users: list = list()
-    user_positions: dict = {}
-    shift_user_positions: dict = {}
-    _text_m = Lock()
-    _users_m = Lock()
-    _users_pos_m = Lock()
-    _buffer = ""
-    _action_stack_m = Lock()
-    _action_stack_by_user = {}
-    # each stack stores (undo_func: couritine, undo_kwargs: dict,
-    #  redo_func: courutine, redo_args: list)
-    _reverted_action_stack_by_user = {}
-    # each stack stores (redo_func: courutine, redo_args: list)
-    # redo_func must crate new action frame for action stack
-
     def __init__(self, text: str, owner_username, file_path=None):
+        self.users: list = list()
+        self.user_positions: dict = {}
+        self.shift_user_positions: dict = {}
+        self._text_m = Lock()
+        self._users_m = Lock()
+        self._users_pos_m = Lock()
+        self._buffer = ""
+        self._action_stack_m = Lock()
+
+        # each stack stores (undo_func: couritine, undo_kwargs: dict,
+        #  redo_func: courutine, redo_args: list)
+
+        self._action_stack_by_user = {}
+        # each stack stores (redo_func: courutine, redo_args: list)
+        # redo_func must crate new action frame for action stack
+        self._reverted_action_stack_by_user = {}
         self._stop = False
         self._owner_username = owner_username
         self._file_path = file_path
@@ -135,7 +136,7 @@ class Model:
         await self._set_user_pos(username_to_correct, *new_pos)
 
     async def _correct_redo_frame_on_cut(self, frame, top, bot):
-        s, frame_username, frame_pos, frame_shifted_pos = frame[1]
+        s, frame_username, frame_pos, frame_shifted_pos, *rest = frame[1]
         new_pos = await self._make_pos_correct_after_cut(
             top, bot, frame_pos, frame_shifted_pos
         )

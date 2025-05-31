@@ -36,7 +36,7 @@ class MessageParser:
         }
 
     async def _user_connected(self, args):
-        await self._model.add_user(args[0])
+        await self._model.add_user(args[2])
 
     async def _user_moved_cursor(self, args):
         await self._move_func_by_dir[args[2]](args[0])
