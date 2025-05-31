@@ -1,7 +1,7 @@
-.venv/
-.vscode/
 src/__pycache__/
 src/.coverage
 src/core/__pycache__/
 src/tests/__pycache__/
 src/.*
+!.gitignore
+.*

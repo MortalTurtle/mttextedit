@@ -1,4 +1,3 @@
-# test_view_module.py
 import unittest
 from unittest import mock
 from core.model import Model

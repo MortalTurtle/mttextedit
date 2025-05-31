@@ -3,7 +3,7 @@ from unittest import mock
 from core.text_exporter import TextExporter
 
 
-class TestVConverter(unittest.TestCase):
+class TestConverter(unittest.TestCase):
     def setUp(self):
         self.converter = TextExporter(["qwer", "qwer", "qwer"])
 

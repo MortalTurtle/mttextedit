@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch,  mock_open
+from unittest.mock import patch, mock_open, MagicMock
 import os
 import shutil
 from core.history_handler import HistoryHandler
@@ -79,6 +79,20 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
                 top, bot, pos)
             self.assertEqual(result, expected)
 
+    async def test_make_pos_correct_on_insert(self):
+        test_cases = [
+            # Вставка перед позицией
+            ((5, 2), (3, 1), (7, 3), (5, 4)),
+            # Вставка на той же строке после позиции
+            ((2, 1), (3, 1), (7, 3), (2, 1)),
+            # Вставка затрагивает несколько строк
+            ((3, 1), (1, 1), (5, 3), (7, 3)),
+        ]
+
+        for pos, top, bot, expected in test_cases:
+            result = await self.handler._make_pos_correct_on_insert(top, bot, pos)
+            self.assertEqual(result, expected)
+
     async def test_cut_selected_edge_cases(self):
         # Вырезание пустого диапазона
         text_lines = ["Hello World"]
@@ -127,6 +141,15 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(op_cnt, 1)
         self.assertEqual(self.handler._changes_frames_by_op[0][3], "")
 
+    async def test_user_cut_save_history_normal(self):
+        text_lines = ["Hello", "World"]
+        op_cnt = await self.handler.user_cut_save_history(
+            "user", text_lines, (1, 0), (3, 0))
+        self.assertEqual(op_cnt, 1)
+        self.assertEqual(self.handler._changes_frames_by_op[0][0], 'cut')
+        self.assertEqual(self.handler._changes_frames_by_op[0][3], "el")
+        self.assertEqual(self.handler._changes_frames_by_op[0][4], "user")
+
     async def test_new_text_save_history_invalid_range(self):
         op_cnt = await self.handler.new_text_save_history(
             "user", (5, 5), (0, 0))
@@ -134,9 +157,23 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.handler._changes_frames_by_op[0][1], (5, 5))
         self.assertEqual(self.handler._changes_frames_by_op[0][2], (0, 0))
 
+    async def test_new_text_save_history_normal(self):
+        op_cnt = await self.handler.new_text_save_history(
+            "user", (1, 1), (3, 2))
+        self.assertEqual(op_cnt, 1)
+        self.assertEqual(self.handler._changes_frames_by_op[0][0], 'insert')
+        self.assertEqual(self.handler._changes_frames_by_op[0][3], "user")
+
     @patch("builtins.open", new_callable=mock_open)
     @patch("os.path.exists", return_value=False)
     async def test_save_base_version_file_not_found(
+            self, mock_exists, mock_open):
+        self.handler._save_base_version()
+        mock_open.assert_called_with(self.handler._BASE_CACHE_PATH, 'w')
+
+    @patch("builtins.open", new_callable=mock_open)
+    @patch("os.path.exists", return_value=True)
+    async def test_save_base_version_file_exists(
             self, mock_exists, mock_open):
         self.handler._save_base_version()
         mock_open.assert_called_with(self.handler._BASE_CACHE_PATH, 'w')
@@ -146,21 +183,54 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
         await self.handler._read_changes("changes_file")
         self.assertEqual(len(self.handler._changes_frames), 0)
 
-    async def test_currect_frame_and_op_on_cut_insert_type(self):
-        """Тест коррекции фреймов типа 'insert' при вырезании"""
-        frame = ['insert', (3, 2), (5, 4), "user"]
-        result = await self.handler._currect_frame_and_op_on_cut(
-            frame, (1, 1), (7, 5), "cut text"
-        )
-        # Ожидаем, что позиции будут скорректированы
-        self.assertEqual(result, [(1, 1), (9, 1), "cut text"])
+    @patch("builtins.open", new_callable=mock_open, read_data="cut 1 0 3 0 text user \n\x1E")
+    async def test_read_changes_valid_format(self, mock_open):
+        await self.handler._read_changes("changes_file")
+        self.assertEqual(len(self.handler._changes_frames), 1)
+        self.assertEqual(self.handler._changes_frames[0][0], 'cut')
+        self.assertEqual(self.handler._changes_frames[0][3], "text")
 
-    async def test_constructor_without_file_path(self):
+    async def test_correct_history_on_undo_cut(self):
+        self.handler._changes_frames_by_op = {0: ['test_frame']}
+        await self.handler.correct_history_on_undo_cut("user", 1)
+        self.assertEqual(len(self.handler._changes_frames_by_op), 0)
+
+    async def test_correct_history_on_undo_paste(self):
+        self.handler._changes_frames_by_op = {0: ['test_frame']}
+        await self.handler.correct_history_on_undo_paste("user", 1)
+        self.assertEqual(len(self.handler._changes_frames_by_op), 0)
+
+    @patch("os.remove")
+    @patch("builtins.open", new_callable=mock_open)
+    async def test_session_ended_with_changes(self, mock_open, mock_remove):
+        self.handler._changes_frames_by_op = {
+            0: ['cut', (1, 0), (3, 0), "text", "user"]
+        }
+        self.handler._last_edited_by = ["user1", "user2"]
+
+        # Создаем временный файл изменений
+        changes_path = self.handler._CHANGES_CACHE_PATH
+        os.makedirs(os.path.dirname(changes_path), exist_ok=True)
+        with open(changes_path, 'w') as f:
+            f.write("test changes")
+
+        await self.handler.session_ended()
+
+        # Проверяем, что файл изменений удален
+        mock_remove.assert_called_with(self.handler._CHANGES_CACHE_PATH)
+        self.assertEqual(len(self.handler._changes_frames), 0)
+
+    def test_constructor_without_file_path(self):
         handler = HistoryHandler()
         self.assertIsNone(handler._file_path)
         self.assertEqual(handler._HISTORY_DIR_PATH,
                          "/tmp/lib/mttext/history/")
         self.assertEqual(handler._CACHE_PATH, "/tmp/lib/mttext/cache/")
+
+    def test_constructor_with_file_path(self):
+        handler = HistoryHandler("/tmp/test.txt")
+        self.assertEqual(handler._file_path, "/tmp/test.txt")
+        self.assertIn("test.txt", handler._HISTORY_DIR_PATH)
 
     @patch("shutil.copy")
     @patch("os.listdir", return_value=[])
@@ -186,6 +256,15 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
 
         # Проверяем, что файл изменений удален
         mock_remove.assert_called_with(self.handler._CHANGES_CACHE_PATH)
+
+    async def test_currect_frame_and_op_on_cut_insert_type(self):
+        """Тест коррекции фреймов типа 'insert' при вырезании"""
+        frame = ['insert', (3, 2), (5, 4), "user"]
+        result = await self.handler._currect_frame_and_op_on_cut(
+            frame, (1, 1), (7, 5), "cut text"
+        )
+        # Ожидаем, что позиции будут скорректированы
+        self.assertEqual(result, [(1, 1), (9, 1), "cut text"])
 
 
 if __name__ == "__main__":
