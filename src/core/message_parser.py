@@ -1,4 +1,4 @@
-from core.model import Model
+from model import Model
 
 
 class MessageParser:
