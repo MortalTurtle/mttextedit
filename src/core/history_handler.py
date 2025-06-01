@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import os
 import shutil
-from view import View
+from core.view import View
 
 
 class HistoryHandler:

@@ -1,5 +1,5 @@
 import re
-from mttext_app import MtTextEditApp
+from core.mttext_app import MtTextEditApp
 import argparse
 import os
 

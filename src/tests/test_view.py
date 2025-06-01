@@ -9,6 +9,7 @@ class TestView(unittest.TestCase):
         self.mock_stdscr = MagicMock()
         self.mock_stdscr.getmaxyx.return_value = (24, 80)
 
+        # Mock all curses functions
         self.curs_set_patcher = patch('curses.curs_set')
         self.start_color_patcher = patch('curses.start_color')
         self.init_pair_patcher = patch('curses.init_pair')
@@ -18,10 +19,11 @@ class TestView(unittest.TestCase):
         self.mock_start_color = self.start_color_patcher.start()
         self.mock_init_pair = self.init_pair_patcher.start()
         self.mock_color_pair = self.color_pair_patcher.start()
-        self.mock_color_pair.return_value = 0
+        self.mock_color_pair.return_value = 0  # Simplify color handling
 
         self.view = View(self.mock_stdscr, "owner")
 
+        # Reset mocks after setup
         self.mock_stdscr.reset_mock()
         self.mock_init_pair.reset_mock()
         self.mock_color_pair.reset_mock()
@@ -40,9 +42,10 @@ class TestView(unittest.TestCase):
         self.assertEqual(self.view._offset_x, 0)
 
     def test_init_colors(self):
-
+        # Re-initialize colors to count calls
         self.view._init_colors()
 
+        # Verify color pairs initialization
         self.assertEqual(self.mock_init_pair.call_count, 7)
         self.mock_init_pair.assert_any_call(
             1, curses.COLOR_WHITE, curses.COLOR_BLACK)
@@ -60,21 +63,25 @@ class TestView(unittest.TestCase):
             7, curses.COLOR_BLACK, curses.COLOR_RED)
 
     def test_correct_offset_by_owner_pos(self):
-
+        # Test no change
         self.view._correct_offset_by_owner_pos(10, 10)
         self.assertEqual(self.view._offset_x, 0)
         self.assertEqual(self.view._offset_y, 0)
 
+        # Test right overflow
         self.view._correct_offset_by_owner_pos(90, 10)
         self.assertEqual(self.view._offset_x, 12)
 
+        # Test left underflow
         self.view._offset_x = 20
         self.view._correct_offset_by_owner_pos(10, 10)
         self.assertEqual(self.view._offset_x, 10)
 
+        # Test bottom overflow
         self.view._correct_offset_by_owner_pos(10, 30)
         self.assertEqual(self.view._offset_y, 10)
 
+        # Test top underflow
         self.view._offset_y = 20
         self.view._correct_offset_by_owner_pos(10, 10)
         self.assertEqual(self.view._offset_y, 10)
@@ -85,24 +92,29 @@ class TestView(unittest.TestCase):
 
         self.view._draw_users_colors(users)
 
+        # Verify user color assignments
         self.assertEqual(self.view._user_color_index["user1"], 2)
         self.assertEqual(self.view._user_color_index["user2"], 3)
         self.assertEqual(self.view._user_color_index["user3"], 4)
 
+        # Verify addstr calls
         self.assertGreater(self.mock_stdscr.addstr.call_count, len(users) * 3)
 
     def test_draw_single_selected_line(self):
         text_lines = ["line1", "line2", "line3"]
         self.mock_stdscr.addstr.reset_mock()
 
+        # Valid call
         self.view._draw_single_selected_line(text_lines, 0, 0, 1, 3)
         self.mock_stdscr.addstr.assert_called_once_with(1, 1, "in", 0)
 
+        # With x-offset
         self.mock_stdscr.addstr.reset_mock()
         self.view._offset_x = 2
         self.view._draw_single_selected_line(text_lines, 0, 0, 1, 3)
         self.mock_stdscr.addstr.assert_called_once_with(1, 0, "n", 0)
 
+        # Out of bounds
         self.mock_stdscr.addstr.reset_mock()
         self.view._offset_x = 10
         self.view._draw_single_selected_line(text_lines, 0, 0, 1, 3)
@@ -112,9 +124,11 @@ class TestView(unittest.TestCase):
         text_lines = ["line1", "line2", "line3"]
         self.mock_stdscr.addstr.reset_mock()
 
+        # Single line
         self.view._paint_range(text_lines, 0, (1, 1), (3, 1))
         self.assertEqual(self.mock_stdscr.addstr.call_count, 1)
 
+        # Multi-line
         self.mock_stdscr.addstr.reset_mock()
         self.view._paint_range(text_lines, 0, (1, 0), (3, 2))
         self.assertEqual(self.mock_stdscr.addstr.call_count, 3)

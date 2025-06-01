@@ -1,9 +1,9 @@
 import asyncio
 import curses
-from history_handler import HistoryHandler
-from message_parser import MessageParser
-from model import Model
-from text_exporter import TextExporter
+from core.history_handler import HistoryHandler
+from core.message_parser import MessageParser
+from core.model import Model
+from core.text_exporter import TextExporter
 
 
 class MtTextEditApp():
