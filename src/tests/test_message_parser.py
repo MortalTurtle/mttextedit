@@ -1,4 +1,4 @@
-# test_view_module.py
+
 import unittest
 from core.model import Model
 from core.message_parser import MessageParser

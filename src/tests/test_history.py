@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, mock_open
 import os
 import shutil
 from core.history_handler import HistoryHandler
@@ -9,14 +9,13 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.file_path = "/tmp/test_file.txt"
         self.handler = HistoryHandler(self.file_path)
-        self.handler._last_edited_by = []  # Очищаем список перед каждым тестом
+        self.handler._last_edited_by = []
 
-        # Создаем временные директории
         os.makedirs(self.handler._HISTORY_DIR_PATH, exist_ok=True)
         os.makedirs(self.handler._CACHE_PATH, exist_ok=True)
 
     def tearDown(self):
-        # Очищаем временные файлы
+
         if os.path.exists(self.handler._CACHE_PATH):
             shutil.rmtree(self.handler._CACHE_PATH)
         if os.path.exists(self.handler._HISTORY_DIR_PATH):
@@ -47,15 +46,15 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
 
     async def test_is_pos_in_range_edge_cases(self):
         test_cases = [
-            # Точка совпадает с началом диапазона
+
             ((1, 1), (1, 1), (3, 3), True),
-            # Точка совпадает с концом диапазона
+
             ((3, 3), (1, 1), (3, 3), True),
-            # Диапазон нулевой длины
+
             ((2, 2), (2, 2), (2, 2), True),
-            # Точка перед началом по строке
+
             ((0, 0), (1, 1), (3, 3), False),
-            # Точка после конца по строке
+
             ((4, 4), (1, 1), (3, 3), False),
         ]
 
@@ -66,11 +65,11 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
 
     async def test_make_pos_correct_after_cut_edge_cases(self):
         test_cases = [
-            # Точка в начале вырезанной области
+
             ((2, 1), (2, 1), (5, 2), (2, 1)),
-            # Точка в конце вырезанной области
+
             ((5, 2), (2, 1), (5, 2), (2, 1)),
-            # Точка на той же строке после вырезания
+
             ((7, 2), (2, 1), (5, 2), (4, 1)),
         ]
 
@@ -81,52 +80,40 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
 
     async def test_make_pos_correct_on_insert(self):
         test_cases = [
-            # Вставка перед позицией
             ((5, 2), (3, 1), (7, 3), (5, 4)),
-            # Вставка на той же строке после позиции
             ((2, 1), (3, 1), (7, 3), (2, 1)),
-            # Вставка затрагивает несколько строк
             ((3, 1), (1, 1), (5, 3), (7, 3)),
         ]
 
         for pos, top, bot, expected in test_cases:
-            result = await self.handler._make_pos_correct_on_insert(top, bot, pos)
+            result = await self.handler._make_pos_correct_on_insert(
+                top, bot, pos)
             self.assertEqual(result, expected)
 
     async def test_cut_selected_edge_cases(self):
-        # Вырезание пустого диапазона
         text_lines = ["Hello World"]
         result = await self.handler._cut_selected((5, 0), (5, 0), text_lines)
         self.assertEqual(result, ["Hello World"])
-
-        # Вырезание всего текста
         result = await self.handler._cut_selected((0, 0), (11, 0), text_lines)
         self.assertEqual(result, [""])
-
-        # Вырезание нескольких строк полностью (до начала последней строки)
         text_lines = ["Line 1", "Line 2", "Line 3"]
         result = await self.handler._cut_selected((0, 0), (0, 2), text_lines)
         self.assertEqual(result, ["Line 3"])
 
     async def test_get_range_edge_cases(self):
-        # Пустой диапазон
         text_lines = ["Hello World"]
         result = await self.handler._get_range(text_lines, (5, 0), (5, 0))
         self.assertEqual(result, "")
-
-        # Диапазон в обратном порядке
         result = await self.handler._get_range(text_lines, (11, 0), (6, 0))
         self.assertEqual(result, "World")
-
-        # Получение всего текста
         result = await self.handler._get_range(text_lines, (0, 0), (11, 0))
         self.assertEqual(result, "Hello World")
 
     async def test_normalize_pos_edge_cases(self):
         test_cases = [
-            # Отрицательные координаты
+
             ((-5, -2), (3, 1), (-5, -3)),
-            # Нулевое смещение
+
             ((5, 2), (0, 0), (5, 2)),
         ]
 
@@ -183,7 +170,8 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
         await self.handler._read_changes("changes_file")
         self.assertEqual(len(self.handler._changes_frames), 0)
 
-    @patch("builtins.open", new_callable=mock_open, read_data="cut 1 0 3 0 text user \n\x1E")
+    @patch("builtins.open",
+           new_callable=mock_open, read_data="cut 1 0 3 0 text user \n\x1E")
     async def test_read_changes_valid_format(self, mock_open):
         await self.handler._read_changes("changes_file")
         self.assertEqual(len(self.handler._changes_frames), 1)
@@ -208,7 +196,6 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
         }
         self.handler._last_edited_by = ["user1", "user2"]
 
-        # Создаем временный файл изменений
         changes_path = self.handler._CHANGES_CACHE_PATH
         os.makedirs(os.path.dirname(changes_path), exist_ok=True)
         with open(changes_path, 'w') as f:
@@ -216,7 +203,6 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
 
         await self.handler.session_ended()
 
-        # Проверяем, что файл изменений удален
         mock_remove.assert_called_with(self.handler._CHANGES_CACHE_PATH)
         self.assertEqual(len(self.handler._changes_frames), 0)
 
@@ -243,10 +229,9 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
     @patch("builtins.open", new_callable=mock_open)
     @patch("os.remove")
     async def test_session_ended_no_changes(self, mock_remove, mock_open):
-        # Без изменений
+
         self.handler._changes_frames = []
 
-        # Создаем временный файл изменений
         changes_path = self.handler._CHANGES_CACHE_PATH
         os.makedirs(os.path.dirname(changes_path), exist_ok=True)
         with open(changes_path, 'w') as f:
@@ -254,7 +239,6 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
 
         await self.handler.session_ended()
 
-        # Проверяем, что файл изменений удален
         mock_remove.assert_called_with(self.handler._CHANGES_CACHE_PATH)
 
     async def test_currect_frame_and_op_on_cut_insert_type(self):
@@ -263,7 +247,7 @@ class TestHistoryHandler(unittest.IsolatedAsyncioTestCase):
         result = await self.handler._currect_frame_and_op_on_cut(
             frame, (1, 1), (7, 5), "cut text"
         )
-        # Ожидаем, что позиции будут скорректированы
+
         self.assertEqual(result, [(1, 1), (9, 1), "cut text"])
 
 

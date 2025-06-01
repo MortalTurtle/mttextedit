@@ -33,7 +33,7 @@ class TestMtTextEditApp(unittest.IsolatedAsyncioTestCase):
         self.app._model.run_view = MagicMock()
         self.app._msg_parser = MagicMock()
         self.app._msg_parser.parse_message = AsyncMock()
-        self.app.stdscr.getch = MagicMock(return_value=65)  # 'A'
+        self.app.stdscr.getch = MagicMock(return_value=65)
         self.app.stdscr.getmaxyx = MagicMock(return_value=(24, 80))
 
     @patch('curses.wrapper')
@@ -80,12 +80,12 @@ class TestMtTextEditApp(unittest.IsolatedAsyncioTestCase):
 
     @patch.object(MtTextEditApp, 'send', new_callable=AsyncMock)
     async def test_parse_key_special(self, mock_send):
-        await self.app._parse_key(19)  # CTRL+S
+        await self.app._parse_key(19)
         mock_send.assert_not_called()
 
     @patch.object(MtTextEditApp, 'send', new_callable=AsyncMock)
     async def test_parse_key_char(self, mock_send):
-        await self.app._parse_key(65)  # 'A'
+        await self.app._parse_key(65)
         mock_send.assert_called_once()
 
     @patch('asyncio.sleep', new_callable=AsyncMock)
